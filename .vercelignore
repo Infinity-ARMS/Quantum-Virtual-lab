@@ -1,0 +1,11 @@
+# never upload local secrets, local databases or tooling with CLI deployments
+.env
+.env.*
+!.env.example
+data/
+dist/
+node_modules/
+.agents/
+.claude/
+skills-lock.json
+*.log

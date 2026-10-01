@@ -1,26 +1,53 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { DatabaseSync } from 'node:sqlite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { COOKIE, createApp } from './app.ts'
-import { MIGRATIONS, openDatabase, runMigrations } from './db.ts'
+import { connectDatabase, MIGRATIONS, openDatabase, runMigrations, type DB } from './db.ts'
 import { insertUser } from './repo.ts'
 import { hashPassword, signToken } from './security.ts'
 
 const SECRET = 'test-secret-that-is-at-least-32-characters-long'
 let server: Server
 let base = ''
-const db = openDatabase(':memory:')
+let db: DB
+
+/**
+ * Tests run on in-memory SQLite by default. Set TEST_DATABASE_URL (a direct, non-pooled Postgres URL) to run the
+ * same suite against PostgreSQL; each database then lives in its own throwaway schema that is dropped afterwards.
+ */
+const PG_URL = process.env.TEST_DATABASE_URL
+const schemas: string[] = []
+async function freshDb(migrate = true): Promise<DB> {
+  if (!PG_URL) return migrate ? openDatabase({ sqlitePath: ':memory:' }) : connectDatabase({ sqlitePath: ':memory:' })
+  const schema = `qltest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  const admin = await connectDatabase({ databaseUrl: PG_URL, sqlitePath: '' })
+  await admin.exec(`CREATE SCHEMA ${schema}`)
+  await admin.close()
+  schemas.push(schema)
+  const url = `${PG_URL}${PG_URL.includes('?') ? '&' : '?'}options=${encodeURIComponent(`-c search_path=${schema}`)}`
+  const conn = await connectDatabase({ databaseUrl: url, sqlitePath: '' })
+  if (migrate) await runMigrations(conn)
+  return conn
+}
 
 beforeAll(async () => {
-  insertUser(db, { id: 'ADM01', username: 'admin', passwordHash: hashPassword('admin-pass-123'), name: 'Admin', role: 'admin' })
-  insertUser(db, { id: 'QL001', username: 'student001', passwordHash: hashPassword('student-pass-1'), name: 'Aarav', role: 'user' })
+  db = await freshDb()
+  await insertUser(db, { id: 'ADM01', username: 'admin', passwordHash: hashPassword('admin-pass-123'), name: 'Admin', role: 'admin' })
+  await insertUser(db, { id: 'QL001', username: 'student001', passwordHash: hashPassword('student-pass-1'), name: 'Aarav', role: 'user' })
   const api = createApp({ db, secret: SECRET, secureCookies: false })
   server = createServer((req, res) => void api(req, res))
   await new Promise<void>((r) => server.listen(0, r))
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
-})
-afterAll(() => server.close())
+}, 60_000) // remote Postgres may need a few seconds to wake from idle
+afterAll(async () => {
+  server?.close()
+  await db?.close()
+  if (PG_URL && schemas.length) {
+    const admin = await connectDatabase({ databaseUrl: PG_URL, sqlitePath: '' })
+    for (const s of schemas) await admin.exec(`DROP SCHEMA ${s} CASCADE`)
+    await admin.close()
+  }
+}, 60_000)
 
 const call = (path: string, init: { method?: string; body?: unknown; cookie?: string } = {}) =>
   fetch(base + path, {
@@ -112,10 +139,10 @@ describe('requireAdmin', () => {
   })
 
   it('a token becomes invalid if the account role changes', async () => {
-    insertUser(db, { id: 'ADM02', username: 'temp-admin', passwordHash: hashPassword('temp-admin-pass'), name: 'Temp', role: 'admin' })
+    await insertUser(db, { id: 'ADM02', username: 'temp-admin', passwordHash: hashPassword('temp-admin-pass'), name: 'Temp', role: 'admin' })
     const { cookie } = await login('temp-admin', 'temp-admin-pass')
     expect((await call('/api/admin/students', { cookie })).status).toBe(200)
-    db.prepare(`UPDATE users SET role = 'user' WHERE id = 'ADM02'`).run()
+    await db.run(`UPDATE users SET role = 'user' WHERE id = 'ADM02'`)
     expect((await call('/api/admin/students', { cookie })).status).toBe(401)
   })
 })
@@ -127,7 +154,7 @@ describe('public registration', () => {
       body: { username: 'attacker', name: 'attacker', email: 'attacker@example.com', password: 'password123', role: 'admin' },
     })
     expect(res.status).toBe(201)
-    const created = db.prepare(`SELECT role FROM users WHERE username = 'attacker'`).get() as { role: string }
+    const created = (await db.get<{ role: string }>(`SELECT role FROM users WHERE username = 'attacker'`))!
     expect(created.role).toBe('user')
     expect(JSON.stringify(await res.json())).not.toMatch(/role|password/)
     const { cookie, json } = await login('attacker', 'password123')
@@ -149,7 +176,7 @@ describe('analytics ingestion', () => {
       },
     })
     expect(res.status).toBe(204)
-    const ev = db.prepare(`SELECT user_id FROM analytics_events WHERE id = 'e-spoof'`).get() as { user_id: string }
+    const ev = (await db.get<{ user_id: string }>(`SELECT user_id FROM analytics_events WHERE id = 'e-spoof'`))!
     expect(ev.user_id).toBe('QL001')
     const admin = await login('admin', 'admin-pass-123')
     const detail = await (await call('/api/admin/students/QL001', { cookie: admin.cookie })).json()
@@ -159,13 +186,19 @@ describe('analytics ingestion', () => {
 })
 
 describe('migrations', () => {
-  it('002 gives existing accounts the default role "user" without losing data', () => {
-    const raw = new DatabaseSync(':memory:')
-    runMigrations(raw, MIGRATIONS.slice(0, 1))
-    raw.prepare(`INSERT INTO users (id, username, password_hash, name, created_at) VALUES ('OLD1', 'legacy', 'h', 'Legacy', 1)`).run()
-    runMigrations(raw)
-    expect(raw.prepare(`SELECT id, name, role FROM users`).all()).toEqual([{ id: 'OLD1', name: 'Legacy', role: 'user' }])
-    expect(() => raw.prepare(`UPDATE users SET role = 'superuser'`).run()).toThrow()
-    expect(runMigrations(raw)).toEqual([]) // idempotent
+  it('002 gives existing accounts the default role "user" without losing data', async () => {
+    const raw = await freshDb(false)
+    await runMigrations(raw, MIGRATIONS.slice(0, 1))
+    await raw.run(`INSERT INTO users (id, username, password_hash, name, created_at) VALUES ('OLD1', 'legacy', 'h', 'Legacy', 1)`)
+    await runMigrations(raw)
+    expect(await raw.all(`SELECT id, name, role FROM users`)).toEqual([{ id: 'OLD1', name: 'Legacy', role: 'user' }])
+    await expect(raw.run(`UPDATE users SET role = 'superuser'`)).rejects.toThrow()
+    expect(await runMigrations(raw)).toEqual([]) // idempotent
+    await raw.close()
+  }, 30_000) // generous for remote Postgres round-trips
+
+  it('usernames are matched case-insensitively', async () => {
+    const res = await call('/api/login', { method: 'POST', body: { username: 'STUDENT001', password: 'student-pass-1' } })
+    expect(res.status).toBe(200)
   })
 })

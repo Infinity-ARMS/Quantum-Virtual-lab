@@ -35,10 +35,11 @@ export const toProfile = (u: UserRow): PublicProfile => ({
   status: u.status,
 })
 
+// usernames are case-insensitive on both SQLite and Postgres
 export const findUserByUsername = (db: DB, username: string) =>
-  db.prepare('SELECT * FROM users WHERE username = ?').get(username) as UserRow | undefined
+  db.get<UserRow>('SELECT * FROM users WHERE lower(username) = lower(?)', [username])
 
-export const findUserById = (db: DB, id: string) => db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined
+export const findUserById = (db: DB, id: string) => db.get<UserRow>('SELECT * FROM users WHERE id = ?', [id])
 
 export interface NewUser {
   id: string
@@ -52,63 +53,66 @@ export interface NewUser {
 }
 
 /** Callers must pass the role explicitly; public sign-up passes the constant 'user'. */
-export function insertUser(db: DB, u: NewUser) {
-  db.prepare(
+export async function insertUser(db: DB, u: NewUser) {
+  await db.run(
     `INSERT INTO users (id, username, password_hash, name, email, course, institution, role, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(u.id, u.username, u.passwordHash, u.name, u.email ?? '', u.course ?? '', u.institution ?? '', u.role, Date.now())
+    [u.id, u.username, u.passwordHash, u.name, u.email ?? '', u.course ?? '', u.institution ?? '', u.role, Date.now()],
+  )
 }
 
 /** Next sequential student id: QL001, QL002, … */
-export function nextStudentId(db: DB): string {
-  const rows = db.prepare(`SELECT id FROM users WHERE id LIKE 'QL%'`).all() as { id: string }[]
+export async function nextStudentId(db: DB): Promise<string> {
+  const rows = await db.all<{ id: string }>(`SELECT id FROM users WHERE id LIKE 'QL%'`)
   const max = rows.reduce((m, r) => Math.max(m, Number(r.id.slice(2)) || 0), 0)
   return `QL${String(max + 1).padStart(3, '0')}`
 }
 
-export function updateProfile(db: DB, id: string, p: Partial<Pick<PublicProfile, 'name' | 'email' | 'course' | 'institution'>>) {
-  const cur = findUserById(db, id)
+export async function updateProfile(
+  db: DB,
+  id: string,
+  p: Partial<Pick<PublicProfile, 'name' | 'email' | 'course' | 'institution'>>,
+) {
+  const cur = await findUserById(db, id)
   if (!cur) return undefined
-  db.prepare('UPDATE users SET name = ?, email = ?, course = ?, institution = ? WHERE id = ?').run(
+  await db.run('UPDATE users SET name = ?, email = ?, course = ?, institution = ? WHERE id = ?', [
     p.name ?? cur.name,
     p.email ?? cur.email,
     p.course ?? cur.course,
     p.institution ?? cur.institution,
     id,
-  )
+  ])
   return findUserById(db, id)
 }
 
-export const listStudents = (db: DB) => db.prepare(`SELECT * FROM users WHERE role = 'user' ORDER BY id`).all() as unknown as UserRow[]
+export const listStudents = (db: DB) => db.all<UserRow>(`SELECT * FROM users WHERE role = 'user' ORDER BY id`)
 
 // ---------------------------------------------------------------- analytics
 
-export function insertEvent(db: DB, e: AnalyticsEvent) {
-  db.prepare('INSERT OR IGNORE INTO analytics_events (id, user_id, type, at, experiment, detail) VALUES (?, ?, ?, ?, ?, ?)').run(
-    e.id,
-    e.userId,
-    e.type,
-    e.at,
-    e.experiment ?? null,
-    e.detail ? JSON.stringify(e.detail) : null,
+export async function insertEvent(db: DB, e: AnalyticsEvent) {
+  await db.run(
+    'INSERT INTO analytics_events (id, user_id, type, at, experiment, detail) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
+    [e.id, e.userId, e.type, e.at, e.experiment ?? null, e.detail ? JSON.stringify(e.detail) : null],
   )
 }
 
 /** Upsert that can never move a record between accounts. */
-export function upsertSession(db: DB, s: SessionRecord) {
-  db.prepare(
+export async function upsertSession(db: DB, s: SessionRecord) {
+  await db.run(
     `INSERT INTO analytics_sessions (id, user_id, started_at, last_seen_at, ended_at) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET last_seen_at = excluded.last_seen_at, ended_at = excluded.ended_at
+     ON CONFLICT (id) DO UPDATE SET last_seen_at = excluded.last_seen_at, ended_at = excluded.ended_at
      WHERE analytics_sessions.user_id = excluded.user_id`,
-  ).run(s.id, s.userId, s.startedAt, s.lastSeenAt, s.endedAt ?? null)
+    [s.id, s.userId, s.startedAt, s.lastSeenAt, s.endedAt ?? null],
+  )
 }
 
-export function upsertRun(db: DB, r: RunRecord) {
-  db.prepare(
+export async function upsertRun(db: DB, r: RunRecord) {
+  await db.run(
     `INSERT INTO analytics_runs (id, user_id, experiment, started_at, last_seen_at, completed_at) VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET last_seen_at = excluded.last_seen_at, completed_at = excluded.completed_at
+     ON CONFLICT (id) DO UPDATE SET last_seen_at = excluded.last_seen_at, completed_at = excluded.completed_at
      WHERE analytics_runs.user_id = excluded.user_id`,
-  ).run(r.id, r.userId, r.experiment, r.startedAt, r.lastSeenAt, r.completedAt ?? null)
+    [r.id, r.userId, r.experiment, r.startedAt, r.lastSeenAt, r.completedAt ?? null],
+  )
 }
 
 interface EventRow {
@@ -120,10 +124,10 @@ interface EventRow {
   detail: string | null
 }
 
-export function snapshot(db: DB, userIds: string[]): Snapshot {
+export async function snapshot(db: DB, userIds: string[]): Promise<Snapshot> {
   if (userIds.length === 0) return { events: [], sessions: [], runs: [] }
   const ph = userIds.map(() => '?').join(',')
-  const events = (db.prepare(`SELECT * FROM analytics_events WHERE user_id IN (${ph})`).all(...userIds) as unknown as EventRow[]).map(
+  const events = (await db.all<EventRow>(`SELECT * FROM analytics_events WHERE user_id IN (${ph})`, userIds)).map(
     (r): AnalyticsEvent => ({
       id: r.id,
       userId: r.user_id,
@@ -134,13 +138,13 @@ export function snapshot(db: DB, userIds: string[]): Snapshot {
     }),
   )
   const sessions = (
-    db.prepare(`SELECT * FROM analytics_sessions WHERE user_id IN (${ph})`).all(...userIds) as {
+    await db.all<{
       id: string
       user_id: string
       started_at: number
       last_seen_at: number
       ended_at: number | null
-    }[]
+    }>(`SELECT * FROM analytics_sessions WHERE user_id IN (${ph})`, userIds)
   ).map(
     (r): SessionRecord => ({
       id: r.id,
@@ -151,14 +155,14 @@ export function snapshot(db: DB, userIds: string[]): Snapshot {
     }),
   )
   const runs = (
-    db.prepare(`SELECT * FROM analytics_runs WHERE user_id IN (${ph})`).all(...userIds) as {
+    await db.all<{
       id: string
       user_id: string
       experiment: ExperimentId
       started_at: number
       last_seen_at: number
       completed_at: number | null
-    }[]
+    }>(`SELECT * FROM analytics_runs WHERE user_id IN (${ph})`, userIds)
   ).map(
     (r): RunRecord => ({
       id: r.id,

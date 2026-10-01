@@ -1,6 +1,8 @@
 /** Server configuration from environment variables (see .env.example). No secrets live in source. */
 export interface ServerConfig {
   secret: string
+  /** PostgreSQL connection URL (production). When absent, a local SQLite file is used. */
+  databaseUrl?: string
   dbPath: string
   port: number
   secureCookies: boolean
@@ -15,6 +17,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const production = env.NODE_ENV === 'production'
   return {
     secret,
+    // Vercel's Neon integration provides DATABASE_URL (pooled); POSTGRES_URL is accepted as an alias
+    databaseUrl: env.DATABASE_URL || env.POSTGRES_URL || undefined,
     dbPath: env.DB_PATH || 'data/qlme.sqlite',
     port: Number(env.PORT) || 8787,
     // Secure cookies by default in production; COOKIE_SECURE=false only for plain-HTTP test deployments

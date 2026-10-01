@@ -16,7 +16,7 @@ function apiDevServer(env: Record<string, string>): Plugin {
       ])
       const config = loadConfig({ ...process.env, ...env })
       const handle = createApp({
-        db: openDatabase(config.dbPath),
+        db: await openDatabase({ databaseUrl: config.databaseUrl, sqlitePath: config.dbPath }),
         secret: config.secret,
         secureCookies: config.secureCookies,
         sessionTtlSeconds: config.sessionTtlSeconds,

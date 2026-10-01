@@ -11,3 +11,9 @@ build/
 .vercel/
 .vscode/
 .idea/
+
+.vercel
+.env*
+.agents/
+.claude/
+skills-lock.json

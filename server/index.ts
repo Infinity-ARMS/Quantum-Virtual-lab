@@ -10,7 +10,7 @@ import { loadConfig } from './config.ts'
 import { openDatabase } from './db.ts'
 
 const config = loadConfig()
-const db = openDatabase(config.dbPath)
+const db = await openDatabase({ databaseUrl: config.databaseUrl, sqlitePath: config.dbPath })
 const api = createApp({ db, secret: config.secret, secureCookies: config.secureCookies, sessionTtlSeconds: config.sessionTtlSeconds })
 
 const DIST = resolve('dist')

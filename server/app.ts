@@ -13,6 +13,8 @@ export interface AppOptions {
   /** Set cookies with the Secure flag (enable behind HTTPS in production). */
   secureCookies: boolean
   sessionTtlSeconds?: number
+  /** Behind a trusted proxy (Vercel): take the client IP from x-forwarded-for instead of the socket. */
+  trustProxy?: boolean
 }
 
 export interface AuthContext {
@@ -106,12 +108,12 @@ export function createApp(opts: AppOptions) {
   }
 
   /** Resolve the caller from the signed cookie; role comes from the verified token + current account row. */
-  function authenticate(req: Req): AuthContext | null {
+  async function authenticate(req: Req): Promise<AuthContext | null> {
     const token = readCookie(req, COOKIE)
     if (!token) return null
     const claims = verifyToken(token, secret)
     if (!claims) return null
-    const user = repo.findUserById(db, claims.sub)
+    const user = await repo.findUserById(db, claims.sub)
     // account deleted, suspended or role changed since the token was issued → token no longer valid
     if (!user || user.status !== 'enrolled' || user.role !== claims.role) return null
     return { userId: user.id, role: user.role, user }
@@ -120,8 +122,8 @@ export function createApp(opts: AppOptions) {
   /** 401 when not signed in (or token invalid/expired). */
   const requireAuth =
     (h: Handler): Handler =>
-    (req, res, body) => {
-      const auth = authenticate(req)
+    async (req, res, body) => {
+      const auth = await authenticate(req)
       if (!auth) throw new HttpError(401, 'Authentication required')
       req.auth = auth
       return h(req, res, body)
@@ -130,8 +132,8 @@ export function createApp(opts: AppOptions) {
   /** 401 when not signed in, 403 for signed-in non-admins; never reads a role from the request. */
   const requireAdmin =
     (h: Handler): Handler =>
-    (req, res, body) => {
-      const auth = authenticate(req)
+    async (req, res, body) => {
+      const auth = await authenticate(req)
       if (!auth) throw new HttpError(401, 'Authentication required')
       if (auth.role !== 'admin') throw new HttpError(403, 'Forbidden')
       req.auth = auth
@@ -149,13 +151,14 @@ export function createApp(opts: AppOptions) {
   }
 
   /** The single sign-in endpoint for every role. The client never states a role; it comes from the database. */
-  route('POST', '/api/login', (req, res, body) => {
+  route('POST', '/api/login', async (req, res, body) => {
     const b = obj(body)
     const username = str(b.username, 64) ?? ''
     const password = typeof b.password === 'string' ? b.password : ''
-    const key = `${req.socket.remoteAddress}|${username.toLowerCase()}`
+    const forwarded = opts.trustProxy ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : ''
+    const key = `${forwarded || req.socket?.remoteAddress || 'unknown'}|${username.toLowerCase()}`
     if (throttle.blocked(key)) throw new HttpError(429, 'Too many attempts. Try again later.')
-    const user = username ? repo.findUserByUsername(db, username) : undefined
+    const user = username ? await repo.findUserByUsername(db, username) : undefined
     const ok = user ? verifyPassword(password, user.password_hash) : (verifyAgainstDummy(password), false)
     if (!user || !ok || user.status !== 'enrolled') {
       throttle.fail(key)
@@ -172,13 +175,13 @@ export function createApp(opts: AppOptions) {
   })
 
   /** Session probe for page loads: reports the signed-in user, or null (not an error) when signed out. */
-  route('GET', '/api/me', (req, res) => {
-    const auth = authenticate(req)
+  route('GET', '/api/me', async (req, res) => {
+    const auth = await authenticate(req)
     send(res, 200, auth ? sessionBody(auth.user) : { user: null })
   })
 
   /** Public sign-up. Always creates a normal account: any role in the request body is ignored. */
-  route('POST', '/api/register', (_req, res, body) => {
+  route('POST', '/api/register', async (_req, res, body) => {
     const b = obj(body)
     const username = (str(b.username, 32) ?? '').toLowerCase()
     const password = typeof b.password === 'string' ? b.password : ''
@@ -186,9 +189,9 @@ export function createApp(opts: AppOptions) {
     if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username)) throw new HttpError(400, 'Username must be 3–32 letters, digits, dots, dashes or underscores.')
     if (password.length < 8 || password.length > 200) throw new HttpError(400, 'Password must be at least 8 characters.')
     if (!name) throw new HttpError(400, 'Name is required.')
-    if (repo.findUserByUsername(db, username)) throw new HttpError(409, 'That username is not available.')
-    const id = repo.nextStudentId(db)
-    repo.insertUser(db, {
+    if (await repo.findUserByUsername(db, username)) throw new HttpError(409, 'That username is not available.')
+    const id = await repo.nextStudentId(db)
+    await repo.insertUser(db, {
       id,
       username,
       passwordHash: hashPassword(password),
@@ -198,7 +201,7 @@ export function createApp(opts: AppOptions) {
       institution: str(b.institution),
       role: 'user', // server-controlled; never taken from the request
     })
-    send(res, 201, { user: repo.toProfile(repo.findUserById(db, id)!) })
+    send(res, 201, { user: repo.toProfile((await repo.findUserById(db, id))!) })
   })
 
   route(
@@ -210,9 +213,9 @@ export function createApp(opts: AppOptions) {
   route(
     'PATCH',
     '/api/profile',
-    requireAuth((req, res, body) => {
+    requireAuth(async (req, res, body) => {
       const b = obj(body)
-      const updated = repo.updateProfile(db, req.auth!.userId, {
+      const updated = await repo.updateProfile(db, req.auth!.userId, {
         name: str(b.name, 80) || undefined,
         email: str(b.email) || undefined,
         course: str(b.course) || undefined,
@@ -235,7 +238,7 @@ export function createApp(opts: AppOptions) {
   route(
     'POST',
     '/api/analytics',
-    requireAuth((req, res, body) => {
+    requireAuth(async (req, res, body) => {
       const { userId, role } = req.auth!
       if (role !== 'user') return send(res, 204) // only student activity is recorded
       const b = obj(body)
@@ -250,7 +253,7 @@ export function createApp(opts: AppOptions) {
           if (typeof v === 'number' && Number.isFinite(v)) detail[k.slice(0, 32)] = v
           else if (typeof v === 'string') detail[k.slice(0, 32)] = v.slice(0, 64)
         }
-        repo.insertEvent(db, {
+        await repo.insertEvent(db, {
           id: e.id as string,
           userId, // always the authenticated account
           type: e.type as AnalyticsEvent['type'],
@@ -266,7 +269,7 @@ export function createApp(opts: AppOptions) {
         if (!id(s.id) || startedAt === null || lastSeenAt === null || lastSeenAt < startedAt) continue
         const endedAt = s.endedAt === undefined ? undefined : (clampTime(s.endedAt) ?? undefined)
         const rec: SessionRecord = { id: s.id as string, userId, startedAt, lastSeenAt, ...(endedAt ? { endedAt } : {}) }
-        repo.upsertSession(db, rec)
+        await repo.upsertSession(db, rec)
       }
       for (const raw of list(b.runs)) {
         const r = obj(raw)
@@ -283,7 +286,7 @@ export function createApp(opts: AppOptions) {
           lastSeenAt,
           ...(completedAt ? { completedAt } : {}),
         }
-        repo.upsertRun(db, rec)
+        await repo.upsertRun(db, rec)
       }
       send(res, 204)
     }),
@@ -292,16 +295,18 @@ export function createApp(opts: AppOptions) {
   route(
     'GET',
     '/api/me/summary',
-    requireAuth((req, res) => send(res, 200, { summary: summarize(req.auth!.userId, repo.snapshot(db, [req.auth!.userId])) })),
+    requireAuth(async (req, res) =>
+      send(res, 200, { summary: summarize(req.auth!.userId, await repo.snapshot(db, [req.auth!.userId])) }),
+    ),
   )
 
   // ---------------------------------------------------------------- admin (server-enforced)
   route(
     'GET',
     '/api/admin/students',
-    requireAdmin((_req, res) => {
-      const students = repo.listStudents(db)
-      const snap = repo.snapshot(
+    requireAdmin(async (_req, res) => {
+      const students = await repo.listStudents(db)
+      const snap = await repo.snapshot(
         db,
         students.map((s) => s.id),
       )
@@ -312,10 +317,10 @@ export function createApp(opts: AppOptions) {
   route(
     'GET',
     '/api/admin/students/:id',
-    requireAdmin((req, res) => {
-      const student = repo.findUserById(db, req.params!.id)
+    requireAdmin(async (req, res) => {
+      const student = await repo.findUserById(db, req.params!.id)
       if (!student || student.role !== 'user') throw new HttpError(404, 'Not found')
-      send(res, 200, { profile: repo.toProfile(student), detail: studentDetail(student.id, repo.snapshot(db, [student.id])) })
+      send(res, 200, { profile: repo.toProfile(student), detail: studentDetail(student.id, await repo.snapshot(db, [student.id])) })
     }),
   )
 
