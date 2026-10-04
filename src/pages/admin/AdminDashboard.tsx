@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ACTIVITY_THRESHOLDS, type ActivityStatus } from '../../analytics/types'
+import { ACTIVITY_THRESHOLDS, EXPERIMENTS, type ActivityStatus } from '../../analytics/types'
 import { fmtDateTime, fmtDuration, fmtRelative } from '../../app/format'
 import { loadRoster, useLiveData } from './useAdminData'
 
@@ -44,8 +44,8 @@ export default function AdminDashboard() {
       active: list.filter((r) => r.summary.status === 'active').length,
       recent: list.filter((r) => r.summary.status === 'recent').length,
       inactive: list.filter((r) => r.summary.status === 'inactive' || r.summary.status === 'never').length,
-      runs: list.reduce((t, r) => t + r.summary.experimentsStarted, 0),
       completed: list.reduce((t, r) => t + r.summary.experimentsCompleted, 0),
+      possible: list.length * EXPERIMENTS.length,
       labTime: list.reduce((t, r) => t + r.summary.labTimeMs, 0),
     }
   }, [data])
@@ -87,9 +87,11 @@ export default function AdminDashboard() {
           <b>{totals.inactive}</b>
         </div>
         <div className="kpi">
-          <span>Total Experiments</span>
-          <b>{totals.runs}</b>
-          <em>{totals.completed} completed</em>
+          <span>Experiments Completed</span>
+          <b>{totals.completed}</b>
+          <em>
+            of {totals.possible} ({EXPERIMENTS.length} per student)
+          </em>
         </div>
         <div className="kpi">
           <span>Total Lab Time</span>
@@ -167,8 +169,8 @@ export default function AdminDashboard() {
                     <td data-label="Lab Time">{fmtDuration(summary.labTimeMs)}</td>
                     <td data-label="Experiments">
                       <span>
-                        {summary.experimentsCompleted} / {summary.experimentsStarted}
-                        <span className="muted small"> done / runs</span>
+                        {summary.experimentsCompleted} / {EXPERIMENTS.length}
+                        <span className="muted small"> completed</span>
                       </span>
                     </td>
                     <td data-label="Completion">

@@ -28,6 +28,8 @@ export function summarize(userId: string, snap: Snapshot): StudentSummary {
   const runs = snap.runs.filter((r) => r.userId === userId)
   const stamps = [...events.map((e) => e.at), ...sessions.map((s) => s.endedAt ?? s.lastSeenAt)]
   const lastActive = stamps.length ? Math.max(...stamps) : null
+  // a student has 5 experiments; opening one several times creates several runs but it is still one experiment
+  const startedIds = new Set(runs.map((r) => r.experiment))
   const completedIds = [...new Set(runs.filter((r) => r.completedAt).map((r) => r.experiment))]
   return {
     userId,
@@ -37,8 +39,8 @@ export function summarize(userId: string, snap: Snapshot): StudentSummary {
     sessions: sessions.length,
     sessionTimeMs: sessions.reduce((t, s) => t + sessionDuration(s), 0),
     labTimeMs: runs.reduce((t, r) => t + runDuration(r), 0),
-    experimentsStarted: runs.length,
-    experimentsCompleted: runs.filter((r) => r.completedAt).length,
+    experimentsStarted: startedIds.size,
+    experimentsCompleted: completedIds.length,
     completedIds,
     completionPct: Math.round((completedIds.length / EXPERIMENTS.length) * 100),
   }

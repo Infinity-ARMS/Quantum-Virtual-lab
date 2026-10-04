@@ -279,6 +279,31 @@ describe('analytics ingestion', () => {
     expect(detail.detail.completedIds).toContain('measure-h')
     expect(detail.detail.shots).toBe(100)
   })
+
+  it('counts each of the 5 experiments once, however many times it was opened', async () => {
+    const { cookie } = await login('student001', 'student-pass-1')
+    const now = Date.now()
+    const run = (id: string, experiment: string, done: boolean) => ({
+      id,
+      experiment,
+      startedAt: now - 5000,
+      lastSeenAt: now,
+      ...(done ? { completedAt: now } : {}),
+    })
+    await call('/api/analytics', {
+      method: 'POST',
+      cookie,
+      body: { runs: [run('r-2', 'measure-h', true), run('r-3', 'measure-h', true), run('r-4', 'bloch-x', false), run('r-5', 'bloch-x', false)] },
+    })
+    const admin = await login('admin', 'admin-pass-123')
+    const { students } = await (await call('/api/admin/students', { cookie: admin.cookie })).json()
+    const s = students.find((x: { profile: { id: string } }) => x.profile.id === 'QL001').summary
+    // 5 runs in total (r-1 … r-5), but only 2 distinct experiments opened and 1 completed
+    expect(s.experimentsStarted).toBe(2)
+    expect(s.experimentsCompleted).toBe(1)
+    expect(s.completedIds).toEqual(['measure-h'])
+    expect(s.completionPct).toBe(20)
+  })
 })
 
 describe('migrations', () => {

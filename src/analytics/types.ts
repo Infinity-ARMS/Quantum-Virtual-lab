@@ -81,7 +81,9 @@ export interface StudentSummary {
   sessions: number
   sessionTimeMs: number
   labTimeMs: number
+  /** Distinct experiments opened at least once (0–5). */
   experimentsStarted: number
+  /** Distinct experiments completed (0–5). */
   experimentsCompleted: number
   completedIds: ExperimentId[]
   completionPct: number

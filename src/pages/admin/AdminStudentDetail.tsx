@@ -135,7 +135,7 @@ export default function AdminStudentDetail() {
                         {s.completed ? '✓ Completed' : s.runs ? 'Started' : 'Not started'}
                       </span>
                       <span className="muted small">
-                        {s.runs} run{s.runs === 1 ? '' : 's'} · {fmtDuration(s.timeMs)}
+                        opened {s.runs} time{s.runs === 1 ? '' : 's'} · {fmtDuration(s.timeMs)}
                       </span>
                     </div>
                   )
