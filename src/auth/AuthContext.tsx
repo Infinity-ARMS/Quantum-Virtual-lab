@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { analytics } from '../analytics/analyticsService'
 import { apiAuthProvider } from './apiAuthProvider'
-import type { AuthProvider, AuthSession } from './types'
+import type { AuthProvider, AuthSession, RegisterInput } from './types'
 
 /** Single authentication implementation: the server's POST /api/login + HttpOnly session cookie. */
 export const authProvider: AuthProvider = apiAuthProvider
@@ -11,6 +11,8 @@ interface AuthContextValue {
   /** False until the server has confirmed (or denied) an existing session after a page load. */
   ready: boolean
   login: (username: string, password: string) => Promise<AuthSession>
+  /** Create a student account, then sign straight into it. */
+  register: (input: RegisterInput) => Promise<AuthSession>
   logout: () => Promise<void>
   /** Keep the header name in sync after a profile edit. */
   setDisplayName: (name: string) => void
@@ -63,6 +65,14 @@ export function AuthProviderRoot({ children }: { children: React.ReactNode }) {
     return s
   }, [])
 
+  const register = useCallback(
+    async (input: RegisterInput) => {
+      await authProvider.register(input)
+      return login(input.email, input.password)
+    },
+    [login],
+  )
+
   const logout = useCallback(async () => {
     analytics.trackLogout()
     await analytics.flush() // send the final records while the session cookie is still valid
@@ -73,7 +83,10 @@ export function AuthProviderRoot({ children }: { children: React.ReactNode }) {
 
   const setDisplayName = useCallback((name: string) => setSession((s) => (s ? { ...s, displayName: name } : s)), [])
 
-  const value = useMemo(() => ({ session, ready, login, logout, setDisplayName }), [session, ready, login, logout, setDisplayName])
+  const value = useMemo(
+    () => ({ session, ready, login, register, logout, setDisplayName }),
+    [session, ready, login, register, logout, setDisplayName],
+  )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

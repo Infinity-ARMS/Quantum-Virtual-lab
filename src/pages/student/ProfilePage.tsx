@@ -6,9 +6,9 @@ import type { ProfileUpdate, StudentProfile } from '../../auth/types'
 import { EXPERIMENTS } from '../../analytics/types'
 import { useOwnSummary } from './StudentDashboard'
 
+// the college email is the sign-in identifier, so it is shown but not editable
 const FIELDS: { key: keyof ProfileUpdate; label: string; type?: string }[] = [
   { key: 'name', label: 'Name' },
-  { key: 'email', label: 'Email', type: 'email' },
   { key: 'course', label: 'Course / Class' },
   { key: 'institution', label: 'Institution' },
 ]

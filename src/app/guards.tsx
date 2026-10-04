@@ -11,7 +11,7 @@ export function RequireRole({ role, children }: { role: Role; children: React.Re
   const { session, ready } = useAuth()
   const location = useLocation()
   if (!ready) return <LoadingScreen label="Checking your session…" />
-  if (!session) return <Navigate to={`/login?portal=${role}`} replace state={{ from: location.pathname }} />
+  if (!session) return <Navigate to="/login" replace state={{ from: location.pathname }} />
   if (session.role !== role) {
     const home = session.role === 'admin' ? '/admin' : '/student'
     return (

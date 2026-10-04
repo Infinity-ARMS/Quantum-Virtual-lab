@@ -8,10 +8,12 @@ import { ExperimentSteps, LabToast, LabToolbar } from '../../components/lab/LabC
 import { WireLayer } from '../../components/QuantumWire'
 import { SingleQubitPanel } from '../../components/SingleQubitPanel'
 import { StatePanel } from '../../components/StatePanel'
-import { vizSignal } from '../../lab/circuit'
+import { gateInput, vizSignal, type SingleSignal } from '../../lab/circuit'
 import { LabContext } from '../../lab/LabContext'
 import { useLabWiring } from '../../lab/useLabWiring'
+import { useOutputReveal } from '../../lab/useOutputReveal'
 import type { GateName } from '../../quantum/gates'
+import { basis } from '../../quantum/singleQubit'
 
 const BLOCH_GATES: Record<string, { gate: GateName; title: string }> = {
   h: { gate: 'H', title: 'Hadamard' },
@@ -32,10 +34,16 @@ function BlochLab({ slug, gate, title }: { slug: string; gate: GateName; title: 
   const wiring = useLabWiring(`qlab-wires-${expId}`, (from, to) => analytics.trackWireConnection(expId, from, to))
   const { conns } = wiring
 
+  // hardware logic: the input state is shown as soon as it reaches the gate IN; the gate output only once the
+  // output connection (gate OUT → Bloch Q0) is detected, animating from the input state to the output state
+  const input = gateInput(conns, gate)
   const signal = useMemo(() => vizSignal(conns, 'viz.bloch.q0'), [conns])
-  const single = signal?.kind === 'single' ? signal.sig : null
+  const output = signal?.kind === 'single' && signal.sig.gates.includes(gate) ? signal.sig : null
+  const revealed = useOutputReveal(input === null ? null : String(input), output !== null)
+  const shown: SingleSignal | null =
+    input === null ? null : revealed && output ? output : { state: basis(input), source: input, gates: [] }
   const gateLive = wiring.live.has(`s.${gate}.out`)
-  const complete = !!single && single.gates.includes(gate)
+  const complete = revealed && output !== null
   useExperimentRun(expId, complete)
 
   const steps = [
@@ -73,10 +81,11 @@ function BlochLab({ slug, gate, title }: { slug: string; gate: GateName; title: 
           ref={wiring.container}
           onPointerDown={() => wiring.selected && wiring.clearSelection()}
         >
-          <BlochPanel signal={signal} conns={conns} snapKey={wiring.snapKey} />
+          {/* a new input state is shown straight away (snap), never animated from the previous one */}
+          <BlochPanel signal={signal} shown={shown} gate={gate} conns={conns} snapKey={wiring.snapKey * 3 + (input ?? 2)} />
           <aside className="lab-side">
             <ExperimentSteps steps={steps} done={complete} />
-            <StatePanel mode="single" single={single} />
+            <StatePanel mode="single" single={shown} />
           </aside>
           <SingleQubitPanel
             gates={[gate]}

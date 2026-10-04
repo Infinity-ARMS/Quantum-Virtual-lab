@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeConn, resolveDouble, vizSignal, type Connection } from '../lab/circuit'
 import { graphReadout } from '../lab/readout'
-import { measure } from './measurement'
+import { addShots, measure } from './measurement'
 import { applyGate, basis } from './singleQubit'
 import { applyCNOT, kron, probabilities2, TWO_QUBIT_LABELS } from './twoQubit'
 
@@ -65,5 +65,27 @@ describe('shot sampling follows the state probabilities', () => {
   it('repeated measurements of a superposition fluctuate', () => {
     const runs = new Set(Array.from({ length: 10 }, () => measure(theory, 1000).join(',')))
     expect(runs.size).toBeGreaterThan(1)
+  })
+})
+
+describe('shot counters (hardware: counts keep adding up until RESET)', () => {
+  it('each run adds its shots to the running totals', () => {
+    const plus = probabilities2(applyCNOT(kron(applyGate('H', basis(0)), basis(0))))
+    let counts = [0, 0, 0, 0]
+    let total = 0
+    for (const shots of [10, 100, 1000]) {
+      const batch = measure(plus, shots)
+      expect(batch.reduce((a, b) => a + b, 0)).toBe(shots)
+      counts = addShots(counts, batch)
+      total += shots
+    }
+    expect(counts.reduce((a, b) => a + b, 0)).toBe(total)
+    expect(total).toBe(1110)
+  })
+
+  it('every shot uses its own random number (deterministic with a fixed sequence)', () => {
+    const seq = [0.1, 0.9, 0.49, 0.51]
+    let i = 0
+    expect(measure([0.5, 0.5], 4, () => seq[i++])).toEqual([2, 2])
   })
 })

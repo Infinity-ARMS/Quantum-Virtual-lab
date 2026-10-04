@@ -85,7 +85,7 @@ describe('single login endpoint', () => {
     const bad = await login('student001', 'wrong')
     expect(bad.res.status).toBe(401)
     const unknown = await call('/api/login', { method: 'POST', body: { username: 'nobody', password: 'x' } })
-    expect(await unknown.json()).toEqual({ error: 'Invalid ID or password.' })
+    expect(await unknown.json()).toEqual({ error: 'Invalid email or password.' })
     const ok = await login('student001', 'student-pass-1')
     expect(JSON.stringify(ok.json)).not.toMatch(/password|scrypt|hash/i)
   })
@@ -148,18 +148,114 @@ describe('requireAdmin', () => {
 })
 
 describe('public registration', () => {
+  const register = (body: Record<string, unknown>) => call('/api/register', { method: 'POST', body })
+
   it('ignores a client-supplied admin role and creates role = user', async () => {
-    const res = await call('/api/register', {
-      method: 'POST',
-      body: { username: 'attacker', name: 'attacker', email: 'attacker@example.com', password: 'password123', role: 'admin' },
-    })
+    const res = await register({ name: 'attacker', email: 'attacker@sakec.ac.in', password: 'password123', role: 'admin' })
     expect(res.status).toBe(201)
-    const created = (await db.get<{ role: string }>(`SELECT role FROM users WHERE username = 'attacker'`))!
+    const created = (await db.get<{ role: string }>(`SELECT role FROM users WHERE email = 'attacker@sakec.ac.in'`))!
     expect(created.role).toBe('user')
     expect(JSON.stringify(await res.json())).not.toMatch(/role|password/)
-    const { cookie, json } = await login('attacker', 'password123')
+    const { cookie, json } = await login('attacker@sakec.ac.in', 'password123')
     expect(json.user.role).toBe('user')
     expect((await call('/api/admin/students', { cookie })).status).toBe(403)
+  })
+
+  it('only accepts @sakec.ac.in email addresses', async () => {
+    for (const email of [
+      'someone@gmail.com',
+      'someone@sakec.ac.in.evil.com',
+      'someone@evilsakec.ac.in',
+      'someone@mail.sakec.ac.in',
+      '@sakec.ac.in',
+      'a b@sakec.ac.in',
+      'someone@sakec.ac.in\nx@gmail.com',
+      '',
+    ]) {
+      const res = await register({ name: 'X', email, password: 'password123' })
+      expect(res.status, email).toBe(400)
+    }
+    const ok = await register({ name: 'Riya', email: '  Riya.Shah@SAKEC.ac.in ', password: 'password123' })
+    expect(ok.status).toBe(201)
+    expect((await ok.json()).user.email).toBe('riya.shah@sakec.ac.in')
+  })
+
+  it('rejects a duplicate email (case-insensitive), short passwords and missing names', async () => {
+    expect((await register({ name: 'Dup', email: 'RIYA.SHAH@sakec.ac.in', password: 'password123' })).status).toBe(409)
+    expect((await register({ name: 'Short', email: 'short@sakec.ac.in', password: 'short' })).status).toBe(400)
+    expect((await register({ email: 'noname@sakec.ac.in', password: 'password123' })).status).toBe(400)
+  })
+
+  it('a new account signs in with its email (any case) and lands as a student', async () => {
+    const { res, json } = await login('Riya.Shah@sakec.ac.in', 'password123')
+    expect(res.status).toBe(200)
+    expect(json.user.role).toBe('user')
+    expect(json.user.institution).toBe('SAKEC')
+  })
+
+  it('the profile email cannot be changed (it is the sign-in identifier)', async () => {
+    const { cookie } = await login('riya.shah@sakec.ac.in', 'password123')
+    const res = await call('/api/profile', { method: 'PATCH', cookie, body: { email: 'other@gmail.com', course: 'TE IT' } })
+    const { profile } = await res.json()
+    expect(profile.email).toBe('riya.shah@sakec.ac.in')
+    expect(profile.course).toBe('TE IT')
+  })
+})
+
+describe('admin role management', () => {
+  const setRole = (id: string, role: unknown, cookie?: string) =>
+    call(`/api/admin/users/${id}/role`, { method: 'PATCH', cookie, body: { role } })
+
+  it('is admin-only: 401 signed out, 403 for students', async () => {
+    expect((await call('/api/admin/users')).status).toBe(401)
+    expect((await setRole('QL001', 'admin')).status).toBe(401)
+    const { cookie } = await login('student001', 'student-pass-1')
+    expect((await call('/api/admin/users', { cookie })).status).toBe(403)
+    expect((await setRole('QL001', 'admin', cookie)).status).toBe(403)
+  })
+
+  it('lists every account with its role and no credentials', async () => {
+    const { cookie } = await login('admin', 'admin-pass-123')
+    const text = await (await call('/api/admin/users', { cookie })).text()
+    const { users } = JSON.parse(text) as { users: { id: string; role: string }[] }
+    expect(users.find((u) => u.id === 'ADM01')?.role).toBe('admin')
+    expect(users.find((u) => u.id === 'QL001')?.role).toBe('user')
+    expect(text).not.toMatch(/scrypt|password|hash/i)
+  })
+
+  it('promotes a student to admin and back, audits it, and ends their old session', async () => {
+    const admin = await login('admin', 'admin-pass-123')
+    const student = await login('riya.shah@sakec.ac.in', 'password123')
+    const id = student.json.user.id as string
+
+    const up = await setRole(id, 'admin', admin.cookie)
+    expect(up.status).toBe(200)
+    expect((await up.json()).user.role).toBe('admin')
+    expect(await (await call('/api/me', { cookie: student.cookie })).json()).toEqual({ user: null }) // must sign in again
+
+    const again = await login('riya.shah@sakec.ac.in', 'password123')
+    expect(again.json.user.role).toBe('admin')
+    expect((await call('/api/admin/users', { cookie: again.cookie })).status).toBe(200)
+
+    expect((await setRole(id, 'user', admin.cookie)).status).toBe(200)
+    expect((await login('riya.shah@sakec.ac.in', 'password123')).json.user.role).toBe('user')
+
+    const audit = await db.all<{ old_role: string; new_role: string; changed_by: string }>(
+      'SELECT old_role, new_role, changed_by FROM role_changes WHERE user_id = ? ORDER BY at, old_role DESC',
+      [id],
+    )
+    expect(audit).toEqual([
+      { old_role: 'user', new_role: 'admin', changed_by: 'ADM01' },
+      { old_role: 'admin', new_role: 'user', changed_by: 'ADM01' },
+    ])
+  })
+
+  it('rejects invalid roles, unknown accounts and changing your own role', async () => {
+    const { cookie } = await login('admin', 'admin-pass-123')
+    expect((await setRole('QL001', 'superuser', cookie)).status).toBe(400)
+    expect((await setRole('NOPE', 'admin', cookie)).status).toBe(404)
+    expect((await setRole('ADM01', 'user', cookie)).status).toBe(400)
+    expect((await db.get<{ role: string }>(`SELECT role FROM users WHERE id = 'ADM01'`))!.role).toBe('admin')
   })
 })
 
@@ -196,6 +292,19 @@ describe('migrations', () => {
     expect(await runMigrations(raw)).toEqual([]) // idempotent
     await raw.close()
   }, 30_000) // generous for remote Postgres round-trips
+
+  it('004 makes non-empty emails unique, case-insensitively', async () => {
+    const t = Date.now()
+    const add = (id: string, email?: string) =>
+      email === undefined
+        ? db.run('INSERT INTO users (id, username, password_hash, name, created_at) VALUES (?, ?, ?, ?, ?)', [id, id, 'h', id, t])
+        : db.run('INSERT INTO users (id, username, password_hash, name, email, created_at) VALUES (?, ?, ?, ?, ?, ?)', [id, id, 'h', id, email, t])
+    await add('E1', 'same@sakec.ac.in')
+    await expect(add('E2', 'SAME@sakec.ac.in')).rejects.toThrow()
+    // accounts without an email (e.g. the seeded admin) are unaffected
+    await add('E3')
+    await add('E4')
+  })
 
   it('usernames are matched case-insensitively', async () => {
     const res = await call('/api/login', { method: 'POST', body: { username: 'STUDENT001', password: 'student-pass-1' } })

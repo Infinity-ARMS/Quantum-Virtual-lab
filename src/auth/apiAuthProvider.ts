@@ -23,6 +23,15 @@ export const apiAuthProvider: AuthProvider = {
     }
   },
 
+  async register(input) {
+    try {
+      await api('/register', { method: 'POST', body: input })
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 400 || err.status === 409)) throw new AuthError(err.message)
+      throw err
+    }
+  },
+
   async logout() {
     await api('/logout', { method: 'POST' })
   },

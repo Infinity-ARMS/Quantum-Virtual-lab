@@ -17,7 +17,15 @@ export interface StudentProfile {
   status: 'enrolled' | 'suspended'
 }
 
-export type ProfileUpdate = Partial<Pick<StudentProfile, 'name' | 'email' | 'course' | 'institution'>>
+export type ProfileUpdate = Partial<Pick<StudentProfile, 'name' | 'course' | 'institution'>>
+
+export interface RegisterInput {
+  name: string
+  /** Must end with @sakec.ac.in (enforced by the server). */
+  email: string
+  password: string
+  course?: string
+}
 
 export class AuthError extends Error {}
 
@@ -28,6 +36,8 @@ export class AuthError extends Error {}
 export interface AuthProvider {
   /** One sign-in for every role; the server decides the role. */
   login(username: string, password: string): Promise<AuthSession>
+  /** Create a student account (the server always assigns role = user). */
+  register(input: RegisterInput): Promise<void>
   logout(): Promise<void>
   /** Restore the session from the server-side cookie after a reload. */
   restore(): Promise<AuthSession | null>

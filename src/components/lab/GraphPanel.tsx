@@ -12,13 +12,15 @@ interface Props {
   shots: number
   onShots: (n: number) => void
   onRun: () => void
+  /** SHOT works only once the gate output is connected (H OUT, or both CNOT outputs). */
+  canMeasure: boolean
   conns: Connection[]
   ports: { id: 'q0' | 'q1'; signal: VizSignal | null }[]
   idleSub: string
 }
 
 /** Probability graph + shot-based measurement, fed by its Q0 (and optionally Q1) input terminals. */
-export function GraphPanel({ graph, labels, measured, measurement, shots, onShots, onRun, conns, ports, idleSub }: Props) {
+export function GraphPanel({ graph, labels, measured, measurement, shots, onShots, onRun, canMeasure, conns, ports, idleSub }: Props) {
   const theory = graph?.probs ?? null
   return (
     <section className="panel viz-panel graph-panel" aria-label="Measurement probability graph">
@@ -36,7 +38,7 @@ export function GraphPanel({ graph, labels, measured, measurement, shots, onShot
       <div className="graph-body">
         <ProbabilityGraph labels={labels} theory={theory} measured={measured} accent={graph?.accent ?? 'blue'} />
         <div className="graph-side">
-          <MeasurementControls shots={shots} onShots={onShots} onRun={onRun} disabled={!theory} />
+          <MeasurementControls shots={shots} onShots={onShots} onRun={onRun} disabled={!theory || !canMeasure} />
           <MeasurementTable labels={labels} result={measured ? measurement : null} />
           <div className="chart-legend">
             <span>

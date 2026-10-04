@@ -1,6 +1,8 @@
 /**
  * Creates or updates accounts from environment variables — credentials are never stored in source.
- *   SEED_ADMIN_USERNAME / SEED_ADMIN_PASSWORD   → one admin account
+ *   SEED_ADMIN_USERNAME / SEED_ADMIN_PASSWORD   → one admin account (the first admin; further admins are
+ *                                                 promoted from student accounts in the admin console)
+ *   SEED_ADMIN_EMAIL (optional)                   → lets that admin also sign in with an email
  *   SEED_STUDENTS="student001:Password1,student002:Password2"   → normal (role = user) accounts
  * Run: npm run seed
  */
@@ -23,7 +25,12 @@ async function upsert(username: string, password: string, role: ServerRole, id: 
   if (password.length < 8) throw new Error(`Password for ${username} must be at least 8 characters`)
   const existing = await findUserByUsername(db, username)
   if (existing) {
-    await db.run('UPDATE users SET password_hash = ?, role = ? WHERE id = ?', [hashPassword(password), role, existing.id])
+    await db.run('UPDATE users SET password_hash = ?, role = ?, email = ? WHERE id = ?', [
+      hashPassword(password),
+      role,
+      email || existing.email,
+      existing.id,
+    ])
     console.log(`updated ${username} (${existing.id}, role=${role})`)
     return
   }
@@ -42,7 +49,7 @@ async function upsert(username: string, password: string, role: ServerRole, id: 
 
 const adminUser = process.env.SEED_ADMIN_USERNAME
 const adminPass = process.env.SEED_ADMIN_PASSWORD
-if (adminUser && adminPass) await upsert(adminUser.toLowerCase(), adminPass, 'admin', 'ADM01', 'Lab Administrator', '')
+if (adminUser && adminPass) await upsert(adminUser.toLowerCase(), adminPass, 'admin', 'ADM01', 'Lab Administrator', (process.env.SEED_ADMIN_EMAIL ?? '').trim().toLowerCase())
 
 for (const pair of (process.env.SEED_STUDENTS ?? '').split(',').filter(Boolean)) {
   const i = pair.indexOf(':')

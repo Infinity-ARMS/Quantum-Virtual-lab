@@ -3,7 +3,6 @@ import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { analytics } from '../analytics/analyticsService'
 import { useAuth } from '../auth/AuthContext'
-import { ThemeToggle } from '../theme/ThemeContext'
 import { BrandMark } from './BrandMark'
 import { ErrorBoundary, LoadingScreen } from './ErrorBoundary'
 import { initials } from './format'
@@ -13,7 +12,10 @@ const STUDENT_NAV = [
   { to: '/student/bloch', label: 'Bloch Sphere Lab', end: false },
   { to: '/student/measurement', label: 'Measurement Lab', end: false },
 ]
-const ADMIN_NAV = [{ to: '/admin', label: 'Student Analytics', end: false }]
+const ADMIN_NAV = [
+  { to: '/admin', label: 'Student Analytics', end: true },
+  { to: '/admin/users', label: 'Users & Roles', end: false },
+]
 
 function useOutsideClose(open: boolean, close: () => void) {
   const ref = useRef<HTMLDivElement>(null)
@@ -129,7 +131,6 @@ export function AppShell({ role }: { role: 'student' | 'admin' }) {
           ))}
         </nav>
         <div className="shell-right">
-          <ThemeToggle />
           <ProfileMenu role={role} />
           <button
             type="button"

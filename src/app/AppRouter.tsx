@@ -13,6 +13,7 @@ const MeasurementExperimentPage = lazy(() => import('../pages/student/Measuremen
 const ProfilePage = lazy(() => import('../pages/student/ProfilePage'))
 const AdminDashboard = lazy(() => import('../pages/admin/AdminDashboard'))
 const AdminStudentDetail = lazy(() => import('../pages/admin/AdminStudentDetail'))
+const AdminUsers = lazy(() => import('../pages/admin/AdminUsers'))
 
 function NotFound() {
   return (
@@ -36,9 +37,10 @@ export function AppRouter() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
-        {/* old portal-specific addresses now lead to the single sign-in page */}
-        <Route path="/student/login" element={<Navigate to="/login?portal=student" replace />} />
-        <Route path="/admin/login" element={<Navigate to="/login?portal=admin" replace />} />
+        {/* one sign-in page for everyone; older addresses lead to it */}
+        <Route path="/register" element={<Navigate to="/login?mode=create" replace />} />
+        <Route path="/student/login" element={<Navigate to="/login" replace />} />
+        <Route path="/admin/login" element={<Navigate to="/login" replace />} />
 
         <Route
           path="/student"
@@ -67,6 +69,7 @@ export function AppRouter() {
         >
           <Route index element={<AdminDashboard />} />
           <Route path="students/:id" element={<AdminStudentDetail />} />
+          <Route path="users" element={<AdminUsers />} />
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </Route>
 

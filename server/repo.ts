@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { AnalyticsEvent, ExperimentId, RunRecord, SessionRecord } from '../src/analytics/types.ts'
 import type { Snapshot } from '../src/analytics/summary.ts'
 import type { DB } from './db.ts'
@@ -14,6 +15,7 @@ export interface UserRow {
   status: 'enrolled' | 'suspended'
   role: ServerRole
   created_at: number
+  last_login_at: number | null
 }
 
 /** The only user shape that ever leaves the server: no password hash, no username. */
@@ -40,6 +42,19 @@ export const findUserByUsername = (db: DB, username: string) =>
   db.get<UserRow>('SELECT * FROM users WHERE lower(username) = lower(?)', [username])
 
 export const findUserById = (db: DB, id: string) => db.get<UserRow>('SELECT * FROM users WHERE id = ?', [id])
+
+export const findUserByEmail = (db: DB, email: string) =>
+  db.get<UserRow>(`SELECT * FROM users WHERE email <> '' AND lower(email) = lower(?)`, [email])
+
+/** Sign-in identifier: the account's email or its username (an exact username match wins). */
+export const findUserByLogin = (db: DB, login: string) =>
+  db.get<UserRow>(
+    `SELECT * FROM users WHERE lower(username) = lower(?) OR (email <> '' AND lower(email) = lower(?))
+     ORDER BY CASE WHEN lower(username) = lower(?) THEN 0 ELSE 1 END LIMIT 1`,
+    [login, login, login],
+  )
+
+export const touchLastLogin = (db: DB, id: string) => db.run('UPDATE users SET last_login_at = ? WHERE id = ?', [Date.now(), id])
 
 export interface NewUser {
   id: string
@@ -86,6 +101,39 @@ export async function updateProfile(
 }
 
 export const listStudents = (db: DB) => db.all<UserRow>(`SELECT * FROM users WHERE role = 'user' ORDER BY id`)
+
+export const listUsers = (db: DB) => db.all<UserRow>(`SELECT * FROM users ORDER BY created_at, id`)
+
+/** What the admin role manager sees for each account (no credentials). */
+export const toAccount = (u: UserRow) => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  role: u.role,
+  status: u.status,
+  createdAt: u.created_at,
+  lastLoginAt: u.last_login_at ?? null,
+})
+
+/** Change an account's role and record who did it. Existing sessions of that account stop working. */
+export async function setUserRole(db: DB, userId: string, role: ServerRole, changedBy: string) {
+  return db.transaction(async (tx) => {
+    const cur = await findUserById(tx, userId)
+    if (!cur) return undefined
+    if (cur.role !== role) {
+      await tx.run('UPDATE users SET role = ? WHERE id = ?', [role, userId])
+      await tx.run('INSERT INTO role_changes (id, user_id, changed_by, old_role, new_role, at) VALUES (?, ?, ?, ?, ?, ?)', [
+        randomUUID(),
+        userId,
+        changedBy,
+        cur.role,
+        role,
+        Date.now(),
+      ])
+    }
+    return findUserById(tx, userId)
+  })
+}
 
 // ---------------------------------------------------------------- analytics
 

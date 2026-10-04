@@ -14,7 +14,7 @@ import { resolveDouble, vizSignal } from '../../lab/circuit'
 import { LabContext } from '../../lab/LabContext'
 import { graphReadout, SINGLE_LABELS } from '../../lab/readout'
 import { useLabWiring } from '../../lab/useLabWiring'
-import { measure } from '../../quantum/measurement'
+import { addShots, measure } from '../../quantum/measurement'
 
 type Kind = 'h' | 'cnot'
 
@@ -61,10 +61,16 @@ function MeasurementLab({ kind }: { kind: Kind }) {
   useExperimentRun(expId, completed)
 
   const runMeasurement = () => {
-    if (!theory) return
-    setMeasurement({ shots, counts: measure(theory, shots), labels, key: theoryKey })
+    if (!theory || !circuitReady) return
+    // like the kit's SHOT counters: every run adds to the running totals until Reset (or a different circuit)
+    const batch = measure(theory, shots)
+    setMeasurement((prev) =>
+      prev && prev.key === theoryKey
+        ? { ...prev, shots: prev.shots + shots, counts: addShots(prev.counts, batch) }
+        : { shots, counts: batch, labels, key: theoryKey },
+    )
     analytics.trackMeasurement(expId, shots)
-    if (circuitReady) setCompleted(true)
+    setCompleted(true)
   }
 
   const has = (from: (f: string) => boolean, to: string) => conns.some((c) => from(c.from) && c.to === to)
@@ -117,6 +123,7 @@ function MeasurementLab({ kind }: { kind: Kind }) {
             shots={shots}
             onShots={setShots}
             onRun={runMeasurement}
+            canMeasure={!!circuitReady}
             conns={conns}
             ports={kind === 'h' ? [{ id: 'q0', signal: g0 }] : [{ id: 'q0', signal: g0 }, { id: 'q1', signal: g1 }]}
             idleSub={kind === 'h' ? 'Wire the H gate OUT to Graph Q0' : 'Wire CNOT outputs to Graph Q0 and Q1'}

@@ -3,9 +3,9 @@ import App from './App'
 import './styles.css'
 import './product.css'
 
-// Apply a saved theme before first paint to avoid a light→dark flash
+// The app has a single light theme; forget the preference earlier versions stored.
 try {
-  if (localStorage.getItem('qlab-theme') === 'dark') document.documentElement.classList.add('dark')
+  localStorage.removeItem('qlab-theme')
 } catch {
   /* storage unavailable */
 }

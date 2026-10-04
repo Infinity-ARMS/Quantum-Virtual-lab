@@ -117,6 +117,34 @@ export const MIGRATIONS: Migration[] = [
       );
       CREATE INDEX analytics_runs_user ON analytics_runs(user_id);`,
   },
+  {
+    // the college email is a sign-in identifier, so it must be unique; role changes are audited
+    id: '004_email_login_and_role_audit',
+    sqlite: `
+      CREATE UNIQUE INDEX users_email_ci ON users (lower(email)) WHERE email <> '';
+      ALTER TABLE users ADD COLUMN last_login_at INTEGER;
+      CREATE TABLE role_changes (
+        id         TEXT PRIMARY KEY,
+        user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        changed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+        old_role   TEXT NOT NULL,
+        new_role   TEXT NOT NULL,
+        at         INTEGER NOT NULL
+      );
+      CREATE INDEX role_changes_user ON role_changes(user_id, at);`,
+    postgres: `
+      CREATE UNIQUE INDEX users_email_ci ON users (lower(email)) WHERE email <> '';
+      ALTER TABLE users ADD COLUMN last_login_at BIGINT;
+      CREATE TABLE role_changes (
+        id         TEXT PRIMARY KEY,
+        user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        changed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+        old_role   TEXT NOT NULL,
+        new_role   TEXT NOT NULL,
+        at         BIGINT NOT NULL
+      );
+      CREATE INDEX role_changes_user ON role_changes(user_id, at);`,
+  },
 ]
 
 export async function runMigrations(db: DB, migrations: Migration[] = MIGRATIONS): Promise<string[]> {

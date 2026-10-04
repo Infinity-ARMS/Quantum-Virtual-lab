@@ -74,6 +74,9 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   }
 }
 
+/** Only college accounts may sign up. */
+export const COLLEGE_EMAIL = /^[a-z0-9](?:[a-z0-9._%+-]{0,63})@sakec\.ac\.in$/
+
 const str = (v: unknown, max = 120) => (typeof v === 'string' ? v.trim().slice(0, max) : undefined)
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 
@@ -153,18 +156,20 @@ export function createApp(opts: AppOptions) {
   /** The single sign-in endpoint for every role. The client never states a role; it comes from the database. */
   route('POST', '/api/login', async (req, res, body) => {
     const b = obj(body)
-    const username = str(b.username, 64) ?? ''
+    // one identifier field: the college email (or, for older accounts, the username)
+    const username = str(b.username ?? b.email, 120) ?? ''
     const password = typeof b.password === 'string' ? b.password : ''
     const forwarded = opts.trustProxy ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : ''
     const key = `${forwarded || req.socket?.remoteAddress || 'unknown'}|${username.toLowerCase()}`
     if (throttle.blocked(key)) throw new HttpError(429, 'Too many attempts. Try again later.')
-    const user = username ? await repo.findUserByUsername(db, username) : undefined
+    const user = username ? await repo.findUserByLogin(db, username) : undefined
     const ok = user ? verifyPassword(password, user.password_hash) : (verifyAgainstDummy(password), false)
     if (!user || !ok || user.status !== 'enrolled') {
       throttle.fail(key)
-      throw new HttpError(401, 'Invalid ID or password.')
+      throw new HttpError(401, 'Invalid email or password.')
     }
     throttle.clear(key)
+    await repo.touchLastLogin(db, user.id)
     setSessionCookie(res, signToken({ sub: user.id, role: user.role }, secret, ttl), ttl)
     send(res, 200, sessionBody(user))
   })
@@ -180,25 +185,29 @@ export function createApp(opts: AppOptions) {
     send(res, 200, auth ? sessionBody(auth.user) : { user: null })
   })
 
-  /** Public sign-up. Always creates a normal account: any role in the request body is ignored. */
+  /**
+   * Public sign-up, restricted to @sakec.ac.in addresses. Always creates a student (role = 'user'): any role in
+   * the request body is ignored. Only an admin can change a role afterwards (PATCH /api/admin/users/:id/role).
+   */
   route('POST', '/api/register', async (_req, res, body) => {
     const b = obj(body)
-    const username = (str(b.username, 32) ?? '').toLowerCase()
+    const email = (str(b.email, 120) ?? '').toLowerCase()
     const password = typeof b.password === 'string' ? b.password : ''
     const name = str(b.name, 80)
-    if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username)) throw new HttpError(400, 'Username must be 3–32 letters, digits, dots, dashes or underscores.')
-    if (password.length < 8 || password.length > 200) throw new HttpError(400, 'Password must be at least 8 characters.')
     if (!name) throw new HttpError(400, 'Name is required.')
-    if (await repo.findUserByUsername(db, username)) throw new HttpError(409, 'That username is not available.')
+    if (!COLLEGE_EMAIL.test(email)) throw new HttpError(400, 'Use your college email address ending in @sakec.ac.in.')
+    if (password.length < 8 || password.length > 200) throw new HttpError(400, 'Password must be at least 8 characters.')
+    if ((await repo.findUserByEmail(db, email)) || (await repo.findUserByUsername(db, email)))
+      throw new HttpError(409, 'An account with this email already exists. Sign in instead.')
     const id = await repo.nextStudentId(db)
     await repo.insertUser(db, {
       id,
-      username,
+      username: email, // the college email is the sign-in identifier
       passwordHash: hashPassword(password),
       name,
-      email: str(b.email),
+      email,
       course: str(b.course),
-      institution: str(b.institution),
+      institution: 'SAKEC',
       role: 'user', // server-controlled; never taken from the request
     })
     send(res, 201, { user: repo.toProfile((await repo.findUserById(db, id))!) })
@@ -217,7 +226,7 @@ export function createApp(opts: AppOptions) {
       const b = obj(body)
       const updated = await repo.updateProfile(db, req.auth!.userId, {
         name: str(b.name, 80) || undefined,
-        email: str(b.email) || undefined,
+        // email is the sign-in identifier and is not editable here
         course: str(b.course) || undefined,
         institution: str(b.institution) || undefined,
       })
@@ -321,6 +330,28 @@ export function createApp(opts: AppOptions) {
       const student = await repo.findUserById(db, req.params!.id)
       if (!student || student.role !== 'user') throw new HttpError(404, 'Not found')
       send(res, 200, { profile: repo.toProfile(student), detail: studentDetail(student.id, await repo.snapshot(db, [student.id])) })
+    }),
+  )
+
+  /** Every account with its role, for the admin role manager. */
+  route(
+    'GET',
+    '/api/admin/users',
+    requireAdmin(async (_req, res) => send(res, 200, { users: (await repo.listUsers(db)).map(repo.toAccount) })),
+  )
+
+  /** Admins decide who is a student ('user') and who is an admin. */
+  route(
+    'PATCH',
+    '/api/admin/users/:id/role',
+    requireAdmin(async (req, res, body) => {
+      const role = obj(body).role
+      if (role !== 'user' && role !== 'admin') throw new HttpError(400, 'Role must be "user" or "admin".')
+      // an admin cannot demote themselves, so there is always at least one admin left
+      if (req.params!.id === req.auth!.userId) throw new HttpError(400, 'You cannot change your own role.')
+      const updated = await repo.setUserRole(db, req.params!.id, role, req.auth!.userId)
+      if (!updated) throw new HttpError(404, 'Not found')
+      send(res, 200, { user: repo.toAccount(updated) })
     }),
   )
 

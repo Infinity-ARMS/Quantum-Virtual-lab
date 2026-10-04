@@ -4,54 +4,31 @@ import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 
 type Vec3 = [number, number, number]
-export type Theme = 'light' | 'dark'
 
 /** Physics Bloch (x, y, z) → three.js world. Z is up, X points toward the viewer, Y to the right (right-handed). */
 const toWorld = ([x, y, z]: Vec3) => new THREE.Vector3(y, z, x)
 
-const PALETTE = {
-  light: {
-    sphere: '#c7d2fe',
-    sphereOpacity: 0.14,
-    disk: '#6366f1',
-    diskOpacity: 0.05,
-    equator: '#6366f1',
-    equatorOpacity: 0.6,
-    grid: '#94a3b8',
-    gridOpacity: 0.3,
-    main: '#64748b',
-    mainOpacity: 0.42,
-    axis: { x: '#e11d48', y: '#059669', z: '#2563eb' },
-    vector: '#4f46e5',
-    tip: '#7c3aed',
-    halo: '#8b5cf6',
-    idle: '#94a3b8',
-    origin: '#334155',
-    guide: '#64748b',
-    trail: '#a855f7',
-  },
-  dark: {
-    sphere: '#4f46e5',
-    sphereOpacity: 0.1,
-    disk: '#818cf8',
-    diskOpacity: 0.07,
-    equator: '#a5b4fc',
-    equatorOpacity: 0.85,
-    grid: '#818cf8',
-    gridOpacity: 0.3,
-    main: '#a5b4fc',
-    mainOpacity: 0.5,
-    axis: { x: '#fb7185', y: '#34d399', z: '#60a5fa' },
-    vector: '#c4b5fd',
-    tip: '#f5d0fe',
-    halo: '#a78bfa',
-    idle: '#64748b',
-    origin: '#e2e8f0',
-    guide: '#94a3b8',
-    trail: '#e879f9',
-  },
+const P = {
+  sphere: '#c7d2fe',
+  sphereOpacity: 0.14,
+  disk: '#6366f1',
+  diskOpacity: 0.05,
+  equator: '#6366f1',
+  equatorOpacity: 0.6,
+  grid: '#94a3b8',
+  gridOpacity: 0.3,
+  main: '#64748b',
+  mainOpacity: 0.42,
+  axis: { x: '#e11d48', y: '#059669', z: '#2563eb' },
+  vector: '#4f46e5',
+  tip: '#7c3aed',
+  halo: '#8b5cf6',
+  idle: '#94a3b8',
+  origin: '#334155',
+  guide: '#64748b',
+  trail: '#a855f7',
 }
-type Palette = (typeof PALETTE)['light']
+type Palette = typeof P
 
 const HOME = new THREE.Vector3(3.3, 2.1, 3.9)
 
@@ -59,7 +36,7 @@ function ring(fn: (t: number) => Vec3, n = 128) {
   return Array.from({ length: n + 1 }, (_, i) => fn((i / n) * Math.PI * 2))
 }
 
-function SphereFrame({ p, theme }: { p: Palette; theme: Theme }) {
+function SphereFrame({ p }: { p: Palette }) {
   const grid = useMemo(() => {
     // latitudes at ±30°, ±60° and longitudes every 30° (world Y is the Bloch Z axis)
     const lats = [-60, -30, 30, 60].map((deg) => {
@@ -76,15 +53,6 @@ function SphereFrame({ p, theme }: { p: Palette; theme: Theme }) {
   const equator = useMemo(() => ring((t) => [Math.cos(t), 0, Math.sin(t)]), [])
   const meridianXZ = useMemo(() => ring((t) => [0, Math.cos(t), Math.sin(t)]), [])
   const meridianYZ = useMemo(() => ring((t) => [Math.cos(t), Math.sin(t), 0]), [])
-  const stars = useMemo(() => {
-    const pts = new Float32Array(260 * 3)
-    for (let i = 0; i < 260; i++) {
-      const v = new THREE.Vector3().randomDirection().multiplyScalar(7 + Math.random() * 5)
-      pts.set([v.x, v.y, v.z], i * 3)
-    }
-    return pts
-  }, [])
-
   return (
     <group>
       <mesh renderOrder={-1}>
@@ -99,28 +67,6 @@ function SphereFrame({ p, theme }: { p: Palette; theme: Theme }) {
           side={THREE.DoubleSide}
         />
       </mesh>
-      {theme === 'dark' && (
-        <>
-          {/* faint atmosphere rim + distant stars */}
-          <mesh scale={1.06}>
-            <sphereGeometry args={[1, 48, 48]} />
-            <meshBasicMaterial
-              color="#6366f1"
-              transparent
-              opacity={0.07}
-              side={THREE.BackSide}
-              blending={THREE.AdditiveBlending}
-              depthWrite={false}
-            />
-          </mesh>
-          <points>
-            <bufferGeometry>
-              <bufferAttribute attach="attributes-position" args={[stars, 3]} />
-            </bufferGeometry>
-            <pointsMaterial color="#c7d2fe" size={0.03} transparent opacity={0.55} depthWrite={false} />
-          </points>
-        </>
-      )}
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[1, 96]} />
         <meshBasicMaterial color={p.disk} transparent opacity={p.diskOpacity} depthWrite={false} side={THREE.DoubleSide} />
@@ -300,8 +246,8 @@ function StateVector({ target, start, snapKey, p }: { target: Vec3 | null; start
     if (!shown.current) return
     const a = anim.current
     if (a) {
-      // cap the step so a dropped frame never skips the visible transition
-      a.t = Math.min(1, a.t + Math.min(dt, 1 / 30) / a.dur)
+      // real time even on slow (software-rendered) PCs; only a long stall is capped so the move is never skipped
+      a.t = Math.min(1, a.t + Math.min(dt, 0.25) / a.dur)
       const e = easeInOut(a.t)
       dir.current.copy(a.from).applyAxisAngle(a.axis, a.angle * e)
       len.current = a.len0 + (a.len1 - a.len0) * e
@@ -417,21 +363,20 @@ interface Props {
   start?: Vec3 | null
   snapKey: number
   resetViewKey: number
-  theme: Theme
   compact?: boolean
 }
 
-export function BlochSphere({ vector, start = null, snapKey, resetViewKey, theme, compact = false }: Props) {
+export function BlochSphere({ vector, start = null, snapKey, resetViewKey, compact = false }: Props) {
   const labelEls = useRef<(HTMLSpanElement | null)[]>([])
-  const p = PALETTE[theme]
+  const p = P
   const home = useMemo(() => HOME.clone().multiplyScalar(compact ? 1.12 : 1), [compact])
   return (
     <div className={`bloch-stage ${compact ? 'compact' : ''}`}>
       <Canvas camera={{ position: home.toArray(), fov: 34 }} dpr={[1, 1.75]} gl={{ antialias: true, alpha: true }}>
-        <ambientLight intensity={theme === 'dark' ? 0.6 : 0.85} />
+        <ambientLight intensity={0.85} />
         <directionalLight position={[3, 5, 4]} intensity={1.1} />
         <directionalLight position={[-4, -2, -3]} intensity={0.35} />
-        <SphereFrame p={p} theme={theme} />
+        <SphereFrame p={p} />
         <Axis to={X_AXIS} color={p.axis.x} />
         <Axis to={Y_AXIS} color={p.axis.y} />
         <Axis to={Z_AXIS} color={p.axis.z} />

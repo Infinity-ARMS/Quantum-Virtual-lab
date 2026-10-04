@@ -78,6 +78,13 @@ export function tryConnect(conns: Connection[], a: string, b: string): ConnectRe
     return { ok: false, msg: 'A gate cannot feed itself' }
   if (conns.some((c) => c.from === from && c.to === to)) return { ok: false, msg: 'Already connected' }
   if (to.startsWith('d.cnot') && SOCKETS[from].kind !== 'source') return { ok: false, msg: 'CNOT inputs take qubit sources' }
+  // hardware kit rules: an output only takes a gate OUT, gates are not chained, and each CNOT line has its own states
+  if (toViz && SOCKETS[from].kind === 'source')
+    return { ok: false, msg: 'Connect the state to the gate IN first — outputs take a gate OUT' }
+  if (SOCKETS[from].kind === 'out' && SOCKETS[to].kind === 'in')
+    return { ok: false, msg: 'Gates are not chained — wire the gate OUT to the visualization input' }
+  if (to === 'd.cnot.cin' && !from.startsWith('d.q0.')) return { ok: false, msg: 'Q0 states go to the CNOT CTRL (Q0) input' }
+  if (to === 'd.cnot.tin' && !from.startsWith('d.q1.')) return { ok: false, msg: 'Q1 states go to the CNOT TGT (Q1) input' }
 
   // a consumer holds exactly one plug — replace any existing cable
   let next = conns.filter((c) => c.to !== to)
@@ -98,30 +105,23 @@ export function tryConnect(conns: Connection[], a: string, b: string): ConnectRe
     }
   }
   next = [...next, makeConn(from, to)]
-  if (hasCycle(next)) return { ok: false, msg: 'That would create a feedback loop' }
   return { ok: true, conns: next, msg: `Connected ${SOCKETS[from].label} → ${SOCKETS[to].label}${note}` }
-}
-
-function hasCycle(conns: Connection[]): boolean {
-  for (const g of SINGLE_GATES) {
-    const seen = new Set<string>()
-    let cur: string | undefined = `s.${g}.in`
-    while (cur) {
-      const up = conns.find((c) => c.to === cur)?.from
-      if (!up || SOCKETS[up].kind === 'source') break
-      const gate = up.split('.')[1]
-      if (seen.has(gate)) return true
-      seen.add(gate)
-      cur = `s.${gate}.in`
-    }
-  }
-  return false
 }
 
 export interface SingleSignal {
   state: Qubit
   source: 0 | 1
   gates: GateName[]
+}
+
+/**
+ * Input connection detector: the initial state (0 or 1) plugged into a gate's IN, or null when that IN is empty.
+ * As on the hardware kit, this alone is enough to show the input state on the Bloch sphere.
+ */
+export function gateInput(conns: Connection[], gate: GateName): 0 | 1 | null {
+  const c = conns.find((x) => x.to === `s.${gate}.in`)
+  const src = c && SOCKETS[c.from]
+  return src && src.kind === 'source' ? src.value! : null
 }
 
 /** Follow cables upstream from a producer socket and simulate the circuit. */
