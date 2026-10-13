@@ -1,23 +1,19 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useState } from 'react'
-import type { Connection, SingleSignal, VizSignal } from '../../lab/circuit'
+import type { SingleSignal } from '../../lab/circuit'
 import { qubitView } from '../../lab/readout'
 import { BlochSphere } from '../BlochSphere'
-import { VizInputs } from './VizInputs'
 
 interface Props {
-  /** What reaches the Bloch Q0 input (the output connection). */
-  signal: VizSignal | null
   /** The state on screen: the input state once it is connected, the gate output once the output is wired. */
   shown: SingleSignal | null
   /** The gate whose output is still awaited while only the input state is shown. */
   gate: string
-  conns: Connection[]
   snapKey: number
 }
 
-/** Single-qubit Bloch visualization with its Q0 input terminal. No arrow until an input state is connected. */
-export function BlochPanel({ signal, shown, gate, conns, snapKey }: Props) {
+/** Single-qubit Bloch visualization (its Q0 input terminal sits in the Output Pins panel). No arrow until an input state is connected. */
+export function BlochPanel({ shown, gate, snapKey }: Props) {
   const [resetViewKey, setResetViewKey] = useState(0)
   const view = shown ? qubitView({ kind: 'single', sig: shown }) : null
   const awaitingOutput = !!shown && shown.gates.length === 0
@@ -79,7 +75,6 @@ export function BlochPanel({ signal, shown, gate, conns, snapKey }: Props) {
           </div>
         </div>
       </div>
-      <VizInputs target="bloch" name="Bloch" conns={conns} ports={[{ id: 'q0', signal }]} />
     </section>
   )
 }

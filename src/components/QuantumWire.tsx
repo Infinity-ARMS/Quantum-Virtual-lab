@@ -31,10 +31,12 @@ function control(p: Pt, dir: Dir, k: number): Pt {
 function cable(a: Pt, da: Dir, b: Pt, db: Dir | null) {
   const dist = Math.hypot(b.x - a.x, b.y - a.y)
   const k = Math.min(170, Math.max(36, dist * 0.42))
-  // cables climbing to a visualization input leave their terminal upward instead of sweeping sideways
+  // a cable climbing to an output pin runs along the kit row first, then rises under the pin (a rounded L),
+  // so it never crosses the display panel
   const climbing = db === 'down' && b.y < a.y - 40
-  const c1 = climbing ? { x: a.x + 36, y: a.y - k * 0.7 } : control(a, da, k)
-  const c2 = db ? control(b, db, k) : { x: b.x, y: b.y + k * 0.3 }
+  const corner = { x: b.x, y: a.y }
+  const c1 = climbing ? corner : control(a, da, k)
+  const c2 = climbing ? corner : db ? control(b, db, k) : { x: b.x, y: b.y + k * 0.3 }
   const mid = {
     x: (a.x + 3 * c1.x + 3 * c2.x + b.x) / 8,
     y: (a.y + 3 * c1.y + 3 * c2.y + b.y) / 8,

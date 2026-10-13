@@ -3,13 +3,12 @@ import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom'
 import LandingPage from '../pages/public/LandingPage'
 import LoginPage from '../pages/public/LoginPage'
 import StudentDashboard from '../pages/student/StudentDashboard'
-import { BlochSelectPage, MeasurementSelectPage } from '../pages/student/SelectionPages'
 import { AppShell } from './AppShell'
 import { RequireRole } from './guards'
 
 // Three.js and the lab only load when an experiment opens; admin pages load for admins only
-const BlochExperimentPage = lazy(() => import('../pages/student/BlochExperimentPage'))
-const MeasurementExperimentPage = lazy(() => import('../pages/student/MeasurementExperimentPage'))
+const BlochLabPage = lazy(() => import('../pages/student/BlochLabPage'))
+const MeasurementLabPage = lazy(() => import('../pages/student/MeasurementLabPage'))
 const ProfilePage = lazy(() => import('../pages/student/ProfilePage'))
 const AdminDashboard = lazy(() => import('../pages/admin/AdminDashboard'))
 const AdminStudentDetail = lazy(() => import('../pages/admin/AdminStudentDetail'))
@@ -52,10 +51,11 @@ export function AppRouter() {
         >
           <Route index element={<StudentDashboard />} />
           <Route path="profile" element={<ProfilePage />} />
-          <Route path="bloch" element={<BlochSelectPage />} />
-          <Route path="bloch/:gate" element={<BlochExperimentPage />} />
-          <Route path="measurement" element={<MeasurementSelectPage />} />
-          <Route path="measurement/:kind" element={<MeasurementExperimentPage />} />
+          {/* each lab opens straight onto its kit with all of its gates; old per-gate addresses lead there */}
+          <Route path="bloch" element={<BlochLabPage />} />
+          <Route path="bloch/:gate" element={<Navigate to="/student/bloch" replace />} />
+          <Route path="measurement" element={<MeasurementLabPage />} />
+          <Route path="measurement/:kind" element={<Navigate to="/student/measurement" replace />} />
           <Route path="*" element={<Navigate to="/student" replace />} />
         </Route>
 

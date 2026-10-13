@@ -63,6 +63,15 @@ export const makeConn = (from: string, to: string, delay?: number): Connection =
   delay,
 })
 
+/** Which experiment a gate input belongs to: X, H, Z, or CNOT (both CNOT inputs are one experiment). */
+const experimentOf = (input: string) => (input.startsWith('d.cnot') ? 'CNOT' : input.split('.')[1])
+
+/** The single-qubit gate whose IN holds a cable (at most one: one experiment at a time). */
+export function activeSingleGate(conns: Connection[]): GateName | null {
+  const c = conns.find((x) => SOCKETS[x.to]?.kind === 'in' && x.to.startsWith('s.'))
+  return c ? (c.to.split('.')[1] as GateName) : null
+}
+
 /** Validate and add a cable between two sockets (in either click order). */
 export function tryConnect(conns: Connection[], a: string, b: string): ConnectResult {
   const ma = SOCKETS[a]
@@ -85,6 +94,11 @@ export function tryConnect(conns: Connection[], a: string, b: string): ConnectRe
     return { ok: false, msg: 'Gates are not chained — wire the gate OUT to the visualization input' }
   if (to === 'd.cnot.cin' && !from.startsWith('d.q0.')) return { ok: false, msg: 'Q0 states go to the CNOT CTRL (Q0) input' }
   if (to === 'd.cnot.tin' && !from.startsWith('d.q1.')) return { ok: false, msg: 'Q1 states go to the CNOT TGT (Q1) input' }
+  // one experiment at a time, as on the kit: another gate's input must be unplugged first
+  if (SOCKETS[to].kind === 'in') {
+    const other = conns.find((c) => SOCKETS[c.to].kind === 'in' && experimentOf(c.to) !== experimentOf(to))
+    if (other) return { ok: false, msg: `One experiment at a time — unplug the ${SOCKETS[other.to].label} cable first` }
+  }
 
   // a consumer holds exactly one plug — replace any existing cable
   let next = conns.filter((c) => c.to !== to)

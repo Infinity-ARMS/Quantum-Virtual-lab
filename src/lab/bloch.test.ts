@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { blochVector, basis } from '../quantum/singleQubit'
-import { gateInput, tryConnect, vizSignal, type Connection } from './circuit'
+import { activeSingleGate, gateInput, tryConnect, vizSignal, type Connection } from './circuit'
 import { qubitView } from './readout'
 
 type V = [number, number, number]
@@ -70,6 +70,19 @@ describe('kit wiring rules', () => {
 
   it('gates are not chained', () => {
     expect(refused([], 's.H.out', 's.Z.in')).toMatch(/not chained/)
+  })
+
+  it('one experiment at a time: a second gate input is refused until the first is unplugged', () => {
+    const x = wire(['s.src0', 's.X.in'])
+    expect(activeSingleGate(x)).toBe('X')
+    expect(refused(x, 's.src1', 's.H.in')).toMatch(/One experiment at a time — unplug the X IN cable/)
+    expect(refused(x, 'd.q0.src1', 'd.cnot.cin')).toMatch(/One experiment at a time/)
+    // swapping the state on the same gate is fine
+    expect(activeSingleGate(wire(['s.src0', 's.X.in'], ['s.src1', 's.X.in']))).toBe('X')
+    // both CNOT inputs belong to one experiment
+    const cnot = wire(['d.q0.src1', 'd.cnot.cin'], ['d.q1.src0', 'd.cnot.tin'])
+    expect(refused(cnot, 's.src0', 's.H.in')).toMatch(/unplug the CNOT control IN/)
+    expect(activeSingleGate(cnot)).toBeNull()
   })
 
   it('each CNOT line takes its own initial states', () => {
