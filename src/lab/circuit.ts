@@ -5,7 +5,8 @@ import { applyCNOT, kron, type TwoQubit } from '../quantum/twoQubit'
 export type SocketKind = 'source' | 'in' | 'out' | 'sink'
 export type Section = 'single' | 'double' | 'viz'
 export type Dir = 'up' | 'down' | 'left' | 'right'
-export type Tone = 'zero' | 'one' | 'in' | 'out' | 'sink'
+/** Jack colours of the hardware kit. */
+export type Tone = 'black' | 'red' | 'blue' | 'yellow' | 'grey' | 'sink'
 
 export interface SocketMeta {
   kind: SocketKind
@@ -26,27 +27,33 @@ export interface Connection {
 export const SINGLE_GATES: GateName[] = ['X', 'H', 'Z']
 
 export const SOCKETS: Record<string, SocketMeta> = {
-  's.src0': { kind: 'source', section: 'single', dir: 'right', tone: 'zero', label: '|0⟩', value: 0 },
-  's.src1': { kind: 'source', section: 'single', dir: 'right', tone: 'one', label: '|1⟩', value: 1 },
+  's.src0': { kind: 'source', section: 'single', dir: 'right', tone: 'black', label: '|0⟩', value: 0 },
+  's.src1': { kind: 'source', section: 'single', dir: 'right', tone: 'red', label: '|1⟩', value: 1 },
   ...Object.fromEntries(
     SINGLE_GATES.flatMap((g) => [
-      [`s.${g}.in`, { kind: 'in', section: 'single', dir: 'left', tone: 'in', label: `${g} IN` }],
-      [`s.${g}.out`, { kind: 'out', section: 'single', dir: 'right', tone: 'out', label: `${g} OUT` }],
+      [`s.${g}.in`, { kind: 'in', section: 'single', dir: 'left', tone: 'blue', label: `${g} IN` }],
+      [`s.${g}.out`, { kind: 'out', section: 'single', dir: 'right', tone: 'yellow', label: `${g} OUT` }],
     ]),
   ),
   'viz.graph.q0': { kind: 'sink', section: 'viz', dir: 'down', tone: 'sink', label: 'Graph Q0' },
   'viz.graph.q1': { kind: 'sink', section: 'viz', dir: 'down', tone: 'sink', label: 'Graph Q1' },
   'viz.bloch.q0': { kind: 'sink', section: 'viz', dir: 'down', tone: 'sink', label: 'Bloch Q0' },
   'viz.bloch.q1': { kind: 'sink', section: 'viz', dir: 'down', tone: 'sink', label: 'Bloch Q1' },
+  // the kit's OUTPUT BANANA PINS: each gate OUT is wired to its own pin
+  'pin.X': { kind: 'sink', section: 'viz', dir: 'down', tone: 'blue', label: 'X OUT pin' },
+  'pin.H': { kind: 'sink', section: 'viz', dir: 'down', tone: 'grey', label: 'H OUT pin' },
+  'pin.Z': { kind: 'sink', section: 'viz', dir: 'down', tone: 'yellow', label: 'Z OUT pin' },
+  'pin.q0': { kind: 'sink', section: 'viz', dir: 'down', tone: 'blue', label: 'CNOT Q0 OUT pin' },
+  'pin.q1': { kind: 'sink', section: 'viz', dir: 'down', tone: 'grey', label: 'CNOT Q1 OUT pin' },
 
-  'd.q0.src0': { kind: 'source', section: 'double', dir: 'right', tone: 'zero', label: 'Q0 |0⟩', value: 0 },
-  'd.q0.src1': { kind: 'source', section: 'double', dir: 'right', tone: 'one', label: 'Q0 |1⟩', value: 1 },
-  'd.q1.src0': { kind: 'source', section: 'double', dir: 'right', tone: 'zero', label: 'Q1 |0⟩', value: 0 },
-  'd.q1.src1': { kind: 'source', section: 'double', dir: 'right', tone: 'one', label: 'Q1 |1⟩', value: 1 },
-  'd.cnot.cin': { kind: 'in', section: 'double', dir: 'left', tone: 'in', label: 'CNOT control IN' },
-  'd.cnot.tin': { kind: 'in', section: 'double', dir: 'left', tone: 'in', label: 'CNOT target IN' },
-  'd.cnot.cout': { kind: 'out', section: 'double', dir: 'right', tone: 'out', label: 'CNOT Q0 OUT' },
-  'd.cnot.tout': { kind: 'out', section: 'double', dir: 'right', tone: 'out', label: 'CNOT Q1 OUT' },
+  'd.q0.src0': { kind: 'source', section: 'double', dir: 'right', tone: 'black', label: 'Q0 |0⟩', value: 0 },
+  'd.q0.src1': { kind: 'source', section: 'double', dir: 'right', tone: 'red', label: 'Q0 |1⟩', value: 1 },
+  'd.q1.src0': { kind: 'source', section: 'double', dir: 'right', tone: 'black', label: 'Q1 |0⟩', value: 0 },
+  'd.q1.src1': { kind: 'source', section: 'double', dir: 'right', tone: 'red', label: 'Q1 |1⟩', value: 1 },
+  'd.cnot.cin': { kind: 'in', section: 'double', dir: 'left', tone: 'grey', label: 'CNOT Q0 IN' },
+  'd.cnot.tin': { kind: 'in', section: 'double', dir: 'left', tone: 'grey', label: 'CNOT Q1 IN' },
+  'd.cnot.cout': { kind: 'out', section: 'double', dir: 'right', tone: 'yellow', label: 'CNOT Q0 OUT' },
+  'd.cnot.tout': { kind: 'out', section: 'double', dir: 'right', tone: 'yellow', label: 'CNOT Q1 OUT' },
 }
 
 const isProducer = (id: string) => ['source', 'out'].includes(SOCKETS[id]?.kind)
@@ -62,6 +69,25 @@ export const makeConn = (from: string, to: string, delay?: number): Connection =
   to,
   delay,
 })
+
+/** The output banana pin each gate OUT is wired to on the kit. */
+export const PIN_FOR: Record<string, string> = {
+  's.X.out': 'pin.X',
+  's.H.out': 'pin.H',
+  's.Z.out': 'pin.Z',
+  'd.cnot.cout': 'pin.q0',
+  'd.cnot.tout': 'pin.q1',
+}
+
+/** Output connection detector: is this gate OUT wired to its output pin? */
+export const outputWired = (conns: Connection[], out: string) => conns.some((c) => c.from === out && c.to === PIN_FOR[out])
+
+/** The basis state (0 or 1) plugged into an input, or null. */
+export function inputBit(conns: Connection[], input: string): 0 | 1 | null {
+  const c = conns.find((x) => x.to === input)
+  const src = c && SOCKETS[c.from]
+  return src && src.kind === 'source' ? src.value! : null
+}
 
 /** Which experiment a gate input belongs to: X, H, Z, or CNOT (both CNOT inputs are one experiment). */
 const experimentOf = (input: string) => (input.startsWith('d.cnot') ? 'CNOT' : input.split('.')[1])
@@ -90,10 +116,12 @@ export function tryConnect(conns: Connection[], a: string, b: string): ConnectRe
   // hardware kit rules: an output only takes a gate OUT, gates are not chained, and each CNOT line has its own states
   if (toViz && SOCKETS[from].kind === 'source')
     return { ok: false, msg: 'Connect the state to the gate IN first — outputs take a gate OUT' }
+  if (to.startsWith('pin.') && PIN_FOR[from] !== to)
+    return { ok: false, msg: `${SOCKETS[from].label} connects to the ${SOCKETS[PIN_FOR[from]]?.label ?? 'matching output pin'}` }
   if (SOCKETS[from].kind === 'out' && SOCKETS[to].kind === 'in')
-    return { ok: false, msg: 'Gates are not chained — wire the gate OUT to the visualization input' }
-  if (to === 'd.cnot.cin' && !from.startsWith('d.q0.')) return { ok: false, msg: 'Q0 states go to the CNOT CTRL (Q0) input' }
-  if (to === 'd.cnot.tin' && !from.startsWith('d.q1.')) return { ok: false, msg: 'Q1 states go to the CNOT TGT (Q1) input' }
+    return { ok: false, msg: 'Gates are not chained — wire the gate OUT to its output banana pin' }
+  if (to === 'd.cnot.cin' && !from.startsWith('d.q0.')) return { ok: false, msg: 'Q0 states go to CNOT Q0 IN' }
+  if (to === 'd.cnot.tin' && !from.startsWith('d.q1.')) return { ok: false, msg: 'Q1 states go to CNOT Q1 IN' }
   // one experiment at a time, as on the kit: another gate's input must be unplugged first
   if (SOCKETS[to].kind === 'in') {
     const other = conns.find((c) => SOCKETS[c.to].kind === 'in' && experimentOf(c.to) !== experimentOf(to))
@@ -103,7 +131,7 @@ export function tryConnect(conns: Connection[], a: string, b: string): ConnectRe
   // a consumer holds exactly one plug — replace any existing cable
   let next = conns.filter((c) => c.to !== to)
   let note = ''
-  if (toViz) {
+  if (toViz && !to.startsWith('pin.')) {
     const fromSection = SOCKETS[from].section
     if (fromSection === 'double' && !from.startsWith('d.cnot'))
       return { ok: false, msg: 'Route Q0/Q1 through the CNOT gate first' }

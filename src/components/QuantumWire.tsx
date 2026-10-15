@@ -11,6 +11,32 @@ interface Props {
   live: Set<string>
   pending: { from: string; x: number; y: number } | null
   onRemove: (id: string) => void
+  /**
+   * Selector of an element that marks a free horizontal channel (e.g. the gap between the kit's rows).
+   * Cables into the output banana pins are routed through it, so they never cover the display or the jacks.
+   */
+  channel?: string
+}
+
+// small offsets keep parallel cables in the channel apart
+const CHANNEL_OFFSET: Record<string, number> = { 'pin.X': -6, 'pin.H': 0, 'pin.Z': 6, 'pin.q0': -4, 'pin.q1': 4 }
+
+/** Out of the gate OUT, up to the channel, along it, then up into the pin — with rounded corners. */
+function channelCable(a: Pt, b: Pt, cy: number) {
+  const r = 9
+  const x1 = a.x + 24
+  const dir = b.x >= x1 ? 1 : -1
+  const d = [
+    `M ${a.x} ${a.y}`,
+    `H ${x1 - r}`,
+    `Q ${x1} ${a.y} ${x1} ${a.y - r}`,
+    `V ${cy + r}`,
+    `Q ${x1} ${cy} ${x1 + dir * r} ${cy}`,
+    `H ${b.x - dir * r}`,
+    `Q ${b.x} ${cy} ${b.x} ${cy - r}`,
+    `V ${b.y}`,
+  ].join(' ')
+  return { d, mid: { x: (x1 + b.x) / 2, y: cy } }
 }
 
 const COLORS = { single: '#2563eb', double: '#7c3aed', viz: '#0d9488' }
@@ -45,7 +71,7 @@ function cable(a: Pt, da: Dir, b: Pt, db: Dir | null) {
 }
 
 /** Overlay that renders every virtual banana cable across the whole workspace. */
-export function WireLayer({ container, sockets, conns, live, pending, onRemove }: Props) {
+export function WireLayer({ container, sockets, conns, live, pending, onRemove, channel }: Props) {
   const [pos, setPos] = useState<Record<string, Pt>>({})
 
   // Track socket centres every frame (cheap: ~20 rects) so cables follow any layout change.
@@ -60,6 +86,8 @@ export function WireLayer({ container, sockets, conns, live, pending, onRemove }
           const r = el.getBoundingClientRect()
           next[id] = { x: Math.round(r.left + r.width / 2 - root.left), y: Math.round(r.top + r.height / 2 - root.top) }
         })
+        const ch = channel ? container.current?.querySelector(channel)?.getBoundingClientRect() : undefined
+        if (ch) next.__channel = { x: 0, y: Math.round(ch.top + ch.height / 2 - root.top) }
         const key = JSON.stringify(next)
         if (key !== last) {
           last = key
@@ -70,9 +98,13 @@ export function WireLayer({ container, sockets, conns, live, pending, onRemove }
     }
     tick()
     return () => cancelAnimationFrame(raf)
-  }, [container, sockets])
+  }, [container, sockets, channel])
 
   const pendingFrom = pending && pos[pending.from]
+  const route = (c: Connection, a: Pt, b: Pt) =>
+    pos.__channel && c.to.startsWith('pin.')
+      ? channelCable(a, b, pos.__channel.y + (CHANNEL_OFFSET[c.to] ?? 0))
+      : cable(a, SOCKETS[c.from].dir, b, SOCKETS[c.to].dir)
 
   return (
     <>
@@ -86,7 +118,7 @@ export function WireLayer({ container, sockets, conns, live, pending, onRemove }
           const a = pos[c.from]
           const b = pos[c.to]
           if (!a || !b) return null
-          const { d } = cable(a, SOCKETS[c.from].dir, b, SOCKETS[c.to].dir)
+          const { d } = route(c, a, b)
           const color = COLORS[SOCKETS[c.from].section]
           const on = live.has(c.from)
           const delay = c.delay ?? 0
@@ -135,7 +167,7 @@ export function WireLayer({ container, sockets, conns, live, pending, onRemove }
           const a = pos[c.from]
           const b = pos[c.to]
           if (!a || !b) return null
-          const { mid } = cable(a, SOCKETS[c.from].dir, b, SOCKETS[c.to].dir)
+          const { mid } = route(c, a, b)
           return (
             <button
               key={c.id}

@@ -1,5 +1,4 @@
 /* ================================================================== theme tokens */
-
 :root {
   color-scheme: light;
   --bg: #f4f6fb;
@@ -56,18 +55,15 @@
 }
 
 /* ================================================================== base */
-
 * {
   box-sizing: border-box;
 }
-
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
 }
-
 body {
   font-family: var(--sans);
   color: var(--ink);
@@ -82,12 +78,10 @@ body {
     background-color 0.3s,
     color 0.3s;
 }
-
 button {
   font: inherit;
   color: inherit;
 }
-
 .mono {
   font-family: var(--mono);
 }
@@ -99,7 +93,6 @@ button {
 }
 
 /* ================================================================== buttons */
-
 .btn {
   display: inline-flex;
   align-items: center;
@@ -130,11 +123,6 @@ button {
   opacity: 0.45;
   cursor: not-allowed;
 }
-.btn-sm {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
-}
 .btn-primary {
   background: linear-gradient(180deg, #3b82f6, #2563eb);
   border-color: #1d4ed8;
@@ -154,45 +142,7 @@ button {
   border-color: #f87171;
 }
 
-.segmented,
-.mode-indicator {
-  display: inline-flex;
-  padding: 2px;
-  border-radius: 9px;
-  background: var(--panel-3);
-  border: 1px solid var(--line);
-}
-.segmented button,
-.mode-indicator span {
-  border: 0;
-  background: transparent;
-  padding: 4px 10px;
-  border-radius: 7px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  cursor: pointer;
-  transition:
-    background 0.25s,
-    color 0.25s,
-    box-shadow 0.25s;
-}
-.mode-indicator span {
-  cursor: default;
-  font-size: 11px;
-}
-.segmented button.is-on,
-.mode-indicator span.is-on {
-  background: var(--raised);
-  color: var(--blue);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.14);
-}
-.mode-indicator span.is-on.purple {
-  color: var(--purple);
-}
-
 /* ================================================================== panels */
-
 .panel {
   position: relative;
   background: var(--panel);
@@ -205,43 +155,6 @@ button {
     background-color 0.3s,
     border-color 0.3s;
 }
-
-.panel-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px 14px 0;
-}
-.panel-head.compact {
-  padding: 11px 14px 6px;
-}
-.panel-head h2 {
-  margin: 1px 0 0;
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-.panel-title {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.kit-panel .panel-title {
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-}
-.panel-sub {
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.panel-hint {
-  font-size: 11px;
-  color: var(--faint);
-  padding-top: 3px;
-}
-
 .micro-label {
   font-size: 9.5px;
   font-weight: 700;
@@ -253,135 +166,7 @@ button {
   color: var(--ink-2);
 }
 
-.mode-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.mode-chip::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.mode-chip.blue {
-  color: var(--blue-ink);
-  background: var(--blue-soft);
-  border: 1px solid var(--blue-line);
-}
-.mode-chip.purple {
-  color: var(--purple-ink);
-  background: var(--purple-soft);
-  border: 1px solid var(--purple-line);
-}
-.mode-chip.small {
-  font-size: 9.5px;
-  padding: 3px 8px;
-}
-
-/* ================================================================== visualization panels */
-
-.viz-panel {
-  display: flex;
-  flex-direction: column;
-  isolation: isolate;
-  overflow: hidden;
-}
-
-.viz-foot {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 7px 12px;
-  border-top: 1px dashed var(--line);
-  background: var(--panel-2);
-  position: relative;
-  z-index: 2;
-}
-
-.viz-input {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 8px;
-  border-radius: 9px;
-  border: 1px solid transparent;
-  transition:
-    background 0.3s,
-    border-color 0.3s;
-}
-.viz-input.is-connected {
-  background: var(--ok-soft);
-  border-color: var(--ok-line);
-}
-.viz-input-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.25;
-}
-.viz-input-name {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--teal-ink);
-}
-.viz-input-name b {
-  color: var(--ink);
-}
-.viz-input-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10.5px;
-  color: var(--faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.viz-input-status .dot {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--line-2);
-}
-.viz-input.is-connected .viz-input-status {
-  color: var(--ok-ink);
-  font-weight: 600;
-}
-.viz-input.is-connected .viz-input-status .dot {
-  background: var(--ok-dot);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok-dot) 25%, transparent);
-}
-.viz-input.is-waiting .viz-input-status .dot {
-  background: #f59e0b;
-}
-
 /* graph */
-.graph-body {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 218px;
-  gap: 14px;
-  padding: 10px 14px 12px;
-}
-.graph-side {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 0;
-}
-
 .prob-chart {
   position: relative;
   display: grid;
@@ -491,72 +276,6 @@ button {
 .prob-chart.is-idle .prob-value {
   color: var(--faint);
 }
-
-.measure-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-}
-.measure-controls .btn {
-  width: 100%;
-  justify-content: center;
-}
-
-.measure-table {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  overflow: hidden;
-  font-size: 11.5px;
-}
-.measure-head,
-.measure-row {
-  display: grid;
-  grid-template-columns: 52px 1fr 1fr;
-  gap: 4px;
-  padding: 4px 9px;
-  align-items: center;
-}
-.measure-head {
-  background: var(--panel-2);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.measure-row {
-  border-top: 1px solid var(--line-soft);
-  font-family: var(--mono);
-  color: var(--ink-2);
-}
-.measure-row .ket {
-  font-weight: 600;
-  color: var(--ink);
-}
-.measure-foot {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 9px;
-  border-top: 1px solid var(--line-soft);
-  background: var(--panel-2);
-  font-size: 10.5px;
-  color: var(--muted);
-}
-
-.chart-legend {
-  display: flex;
-  gap: 12px;
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: auto;
-}
-.chart-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
 .lg {
   width: 10px;
   height: 10px;
@@ -575,17 +294,6 @@ button {
 /* bloch */
 .bloch-panel {
   background: var(--bloch-bg);
-}
-.panel-head.overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 3;
-  pointer-events: none;
-}
-.panel-head.overlay > * {
-  pointer-events: auto;
 }
 .bloch-grid {
   flex: 1;
@@ -667,7 +375,6 @@ button {
 .bloch-stage.compact .bloch-label.pole span {
   font-size: 12px;
 }
-
 .bloch-cell-tag {
   position: absolute;
   top: 62px;
@@ -684,43 +391,6 @@ button {
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
-}
-.qubit-badge {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--purple-ink);
-  background: var(--purple-soft);
-  border: 1px solid var(--purple-line);
-  padding: 2px 7px;
-  border-radius: 6px;
-}
-.transition-chip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 9px;
-  border-radius: 8px;
-  background: var(--label-bg);
-  border: 1px solid var(--purple-line);
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.08);
-  font-size: 12px;
-  white-space: nowrap;
-}
-.bloch-grid.two .transition-chip {
-  font-size: 10.5px;
-  padding: 3px 7px;
-}
-.transition-chip i {
-  font-style: normal;
-  color: var(--faint);
-}
-.transition-chip b {
-  color: var(--blue);
-  font-family: var(--mono);
-}
-.transition-chip .strong {
-  color: var(--purple);
 }
 .bloch-note {
   position: absolute;
@@ -740,336 +410,7 @@ button {
   text-align: center;
 }
 
-/* ================================================================== kit panels */
-
-.kit-panel {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--panel) 90%, transparent), var(--panel)),
-    radial-gradient(circle, var(--kit-dot) 1px, transparent 1.2px) 0 0 / 14px 14px,
-    var(--panel);
-}
-.kit-panel.accent-blue {
-  border-top: 3px solid #3b82f6;
-}
-.kit-panel.accent-purple {
-  border-top: 3px solid #8b5cf6;
-}
-.kit-body {
-  display: flex;
-  gap: 18px;
-  padding: 10px 16px 14px;
-  align-items: stretch;
-}
-.kit-col {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.kit-col.grow {
-  flex: 1;
-  align-items: center;
-}
-.out-col {
-  width: 130px;
-}
-
-.source-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  flex: 1;
-  justify-content: center;
-}
-.ket-lg {
-  font-family: var(--mono);
-  font-size: 17px;
-  font-weight: 600;
-}
-
-.gate-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.gate-row {
-  display: flex;
-  align-items: center;
-}
-.trace {
-  width: 20px;
-  height: 2px;
-  background: var(--line-2);
-  transition: background 0.3s;
-}
-.trace.on {
-  background: var(--blue);
-}
-.accent-purple .trace.on {
-  background: var(--purple);
-}
-
-.gate {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 136px;
-  height: 44px;
-  padding: 0 12px;
-  border-radius: 10px;
-  background: var(--raised);
-  border: 1px solid var(--line-2);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-  transition:
-    border-color 0.3s,
-    box-shadow 0.4s,
-    transform 0.2s;
-  cursor: help;
-}
-.gate:hover {
-  z-index: 40; /* keep the tooltip above the cable overlay */
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
-}
-.gate-symbol {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  font-family: var(--mono);
-  font-weight: 700;
-  font-size: 16px;
-  color: var(--blue);
-  background: var(--blue-soft);
-  transition:
-    background 0.3s,
-    color 0.3s;
-}
-.gate-name {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--ink-2);
-}
-.gate.is-active.accent-blue {
-  border-color: #60a5fa;
-  box-shadow:
-    0 0 0 3px rgba(59, 130, 246, 0.14),
-    0 6px 18px rgba(37, 99, 235, 0.22);
-}
-.gate.is-active.accent-blue .gate-symbol {
-  color: #fff;
-  background: linear-gradient(135deg, #3b82f6, #4f46e5);
-}
-.gate.is-active.accent-purple {
-  border-color: #a78bfa;
-  box-shadow:
-    0 0 0 3px rgba(139, 92, 246, 0.14),
-    0 6px 18px rgba(124, 58, 237, 0.24);
-}
-
-.tooltip {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 0;
-  right: 0;
-  margin-inline: auto;
-  width: max-content;
-  max-width: 250px;
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 9px 12px;
-  border-radius: 10px;
-  background: var(--tooltip-bg);
-  color: var(--tooltip-ink);
-  border: 1px solid var(--line-2);
-  font-size: 11.5px;
-  line-height: 1.35;
-  box-shadow: var(--shadow-pop);
-  pointer-events: none;
-}
-.tooltip strong {
-  color: #fff;
-  font-size: 12.5px;
-  margin-bottom: 2px;
-}
-
-.out-legend {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  font-size: 11px;
-  color: var(--muted);
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px dashed var(--line-2);
-  flex: 1;
-}
-.legend-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--tone);
-  box-shadow: 0 0 0 2px var(--line);
-}
-.legend-note {
-  margin-top: auto;
-  font-size: 10.5px;
-  line-height: 1.35;
-  color: var(--faint);
-}
-
-/* double qubit */
-.dq-sources {
-  gap: 10px;
-  padding: 8px 12px;
-  background: var(--purple-soft);
-  border-color: var(--purple-line);
-}
-.qubit-group {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.qubit-group + .qubit-group {
-  padding-top: 10px;
-  border-top: 1px dashed var(--purple-line);
-}
-.qubit-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.qubit-group .socket-label {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 13px;
-}
-.qubit-tag {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--purple-ink);
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: var(--purple-soft);
-}
-.double-body {
-  gap: 12px;
-}
-.double-body .out-col {
-  width: 128px;
-}
-
-.cnot-row {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.cnot-ports {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  height: 84px;
-  padding: 6px 0;
-}
-.cnot-ports .socket-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-.gate.cnot-gate {
-  width: 132px;
-  height: 108px;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  padding: 6px 12px;
-}
-.cnot-diagram {
-  width: 100%;
-  height: 72px;
-}
-.cnot-diagram line {
-  stroke: var(--faint);
-  stroke-width: 2;
-}
-.cnot-diagram .ctrl {
-  fill: #7c3aed;
-}
-.cnot-diagram .target {
-  fill: var(--raised);
-  stroke: #7c3aed;
-  stroke-width: 2.5;
-}
-.cnot-diagram .plus {
-  stroke: #7c3aed;
-  stroke-width: 2.5;
-}
-.gate.cnot-gate.is-active .cnot-diagram line:not(.plus) {
-  stroke: #8b5cf6;
-}
-
-.dq-outputs {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 12px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  flex: 1;
-  justify-content: center;
-}
-.dq-readout {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--ink-2);
-}
-.dq-readout b {
-  color: var(--purple);
-  margin-left: 4px;
-}
-.dq-lamp {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--line-2);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
-  transition:
-    background 0.3s,
-    box-shadow 0.3s;
-}
-.dq-readout.on .dq-lamp {
-  background: #a78bfa;
-  box-shadow:
-    0 0 0 3px rgba(139, 92, 246, 0.18),
-    0 0 10px rgba(139, 92, 246, 0.5);
-}
-.dq-hint {
-  font-size: 10px;
-  line-height: 1.35;
-  color: var(--faint);
-}
-
 /* ================================================================== sockets */
-
 .socket-wrap {
   display: inline-flex;
   align-items: center;
@@ -1081,23 +422,6 @@ button {
 .socket-label {
   user-select: none;
 }
-
-.tone-zero {
-  --tone: #2563eb;
-}
-.tone-one {
-  --tone: #dc2626;
-}
-.tone-in {
-  --tone: #eab308;
-}
-.tone-out {
-  --tone: #16a34a;
-}
-.tone-sink {
-  --tone: #0d9488;
-}
-
 .socket {
   position: relative;
   flex: none;
@@ -1176,7 +500,6 @@ button {
 }
 
 /* ================================================================== wires */
-
 .wire-layer {
   position: absolute;
   inset: 0;
@@ -1214,7 +537,6 @@ button {
   opacity: 0.75;
   animation: wire-flow 0.6s linear infinite reverse;
 }
-
 .wire-handles {
   position: absolute;
   inset: 0;
@@ -1250,238 +572,12 @@ button {
 }
 
 /* ================================================================== side column */
-
-.side-panel {
-  display: flex;
-  flex-direction: column;
-}
-.state-panel {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding-bottom: 10px;
-}
-.state-block {
-  margin: 2px 12px 6px;
-  padding: 8px 11px;
-  border-radius: 11px;
-  border: 1px solid var(--line);
-  background: var(--panel-2);
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.state-block.blue {
-  border-left: 3px solid #3b82f6;
-}
-.state-block.purple {
-  border-left: 3px solid #8b5cf6;
-}
-.state-block-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.idle-tag {
-  font-size: 10.5px;
-  color: var(--faint);
-}
-.named-state {
-  font-family: var(--mono);
-  font-weight: 700;
-  font-size: 13px;
-  color: var(--purple);
-  padding: 1px 8px;
-  border-radius: 6px;
-  background: var(--purple-soft);
-}
-.ket-display {
-  font-family: var(--mono);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.psi {
-  color: var(--muted);
-  font-weight: 500;
-}
-.amp-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px 10px;
-  font-size: 11px;
-  color: var(--ink-2);
-}
 .bloch-coords {
   font-size: 11px;
   color: var(--muted);
 }
-.mini-bar {
-  display: grid;
-  grid-template-columns: 34px 1fr 48px;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-}
-.mini-bar .num {
-  text-align: right;
-  font-weight: 600;
-}
-.mini-track {
-  height: 7px;
-  border-radius: 4px;
-  background: var(--line);
-  overflow: hidden;
-}
-.mini-fill {
-  height: 100%;
-  border-radius: 4px;
-}
-.mini-fill.blue {
-  background: linear-gradient(90deg, #60a5fa, #2563eb);
-}
-.history {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 4px;
-  border-top: 1px dashed var(--line);
-}
-.history-chain {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-}
-.history-chain.small {
-  font-size: 11.5px;
-}
-.history-chain i {
-  font-style: normal;
-  color: var(--faint);
-  margin: 0 1px;
-}
-.h-step {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.h-node {
-  font-family: var(--mono);
-  font-weight: 600;
-  padding: 1px 7px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--raised);
-}
-.h-node.h-gate {
-  color: #fff;
-  background: #3b82f6;
-  border-color: #3b82f6;
-}
-.h-node.h-gate.purple {
-  background: #7c3aed;
-  border-color: #7c3aed;
-}
-.h-node.out {
-  color: var(--purple);
-  border-color: var(--purple-line);
-  background: var(--purple-soft);
-}
-.two-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-}
-.two-cell {
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 8px;
-  border-radius: 7px;
-  border: 1px solid var(--line);
-  background: var(--raised);
-  font-size: 11.5px;
-  transition: all 0.35s;
-}
-.two-cell.on {
-  border-color: var(--purple);
-  background: var(--purple-soft);
-  color: var(--purple-ink);
-  box-shadow: 0 0 0 2px var(--purple-soft);
-}
-
-.preset-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 0 12px 10px;
-}
-.preset {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--raised);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color 0.2s,
-    box-shadow 0.2s,
-    transform 0.15s;
-}
-.preset:hover {
-  transform: translateX(2px);
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.1);
-}
-.preset-num {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  font-weight: 700;
-  font-size: 12px;
-  color: #fff;
-}
-.preset.blue .preset-num {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-}
-.preset.purple .preset-num {
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-}
-.preset-text {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  line-height: 1.3;
-}
-.preset-text strong {
-  font-size: 12.5px;
-}
-.preset-text .mono {
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.preset-go {
-  color: var(--faint);
-}
-.preset.is-on.blue {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px var(--blue-soft);
-}
-.preset.is-on.purple {
-  border-color: var(--purple);
-  box-shadow: 0 0 0 3px var(--purple-soft);
-}
 
 /* ================================================================== toast */
-
 .toast {
   max-width: min(92vw, 560px);
   text-align: center;
@@ -1502,72 +598,4 @@ button {
 }
 .prob-chart.is-tight .prob-value {
   font-size: 10px;
-}
-
-/* keep the double-qubit readout column from being squeezed */
-.double-body .out-col {
-  flex: none;
-}
-.dq-readout {
-  white-space: nowrap;
-}
-
-/* short laptop screens: tighten vertical spacing so the measurement table stays visible */
-@media (max-height: 700px) {
-  .chart-legend {
-    display: none;
-  }
-  .viz-foot {
-    padding: 4px 12px;
-  }
-  .viz-input {
-    padding: 2px 8px;
-  }
-  .graph-body {
-    padding: 6px 14px 8px;
-    gap: 12px;
-  }
-  .graph-side {
-    gap: 6px;
-  }
-  .measure-head,
-  .measure-row {
-    padding: 3px 9px;
-  }
-  .measure-foot {
-    padding: 3px 9px;
-  }
-  .kit-body {
-    padding: 8px 16px 10px;
-  }
-}
-
-/* narrower laptops: compact the double-qubit kit so it stays inside its panel */
-@media (max-width: 1480px) {
-  .double-body {
-    gap: 8px;
-    padding-inline: 12px;
-  }
-  .double-body .out-col {
-    width: 84px;
-  }
-  .dq-outputs {
-    padding: 8px 10px;
-  }
-  .dq-hint {
-    display: none;
-  }
-  .gate.cnot-gate {
-    width: 112px;
-  }
-  .cnot-row {
-    gap: 6px;
-  }
-  .qubit-group {
-    gap: 8px;
-  }
-}
-.double-body {
-  min-width: 0;
-  overflow: visible;
 }

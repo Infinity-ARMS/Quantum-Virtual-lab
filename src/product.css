@@ -1,8 +1,4 @@
-/* Product shell, portal pages, admin analytics and responsive layout.
-   Colours come only from the theme tokens in styles.css. */
-
 /* ================================================================== base additions */
-
 :focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
@@ -51,7 +47,6 @@ h3 {
 }
 
 /* ================================================================== brand + shell */
-
 .brand {
   display: flex;
   align-items: center;
@@ -87,7 +82,6 @@ h3 {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .shell {
   min-height: 100vh;
   display: flex;
@@ -144,7 +138,6 @@ h3 {
   min-width: 0;
   outline: none;
 }
-
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -169,7 +162,6 @@ h3 {
 .menu-btn {
   display: none;
 }
-
 .profile-menu {
   position: relative;
 }
@@ -275,7 +267,6 @@ h3 {
 }
 
 /* ================================================================== public pages */
-
 .public-page {
   min-height: 100vh;
   display: flex;
@@ -288,6 +279,7 @@ h3 {
   gap: 12px;
   padding: 14px 20px;
 }
+
 /* ---------------------------------------------------------------- homepage */
 html {
   scroll-behavior: smooth;
@@ -562,7 +554,6 @@ html {
 .about-copy p + p {
   margin-top: 14px;
 }
-
 .concept-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -762,7 +753,6 @@ html {
 .home-foot a:hover {
   color: var(--ink);
 }
-
 @media (max-width: 960px) {
   .home-hero-grid,
   .about-grid {
@@ -810,7 +800,6 @@ html {
     scroll-behavior: auto;
   }
 }
-
 .auth-wrap {
   flex: 1;
   display: grid;
@@ -931,7 +920,6 @@ input[aria-invalid='true'] {
 }
 
 /* ================================================================== student pages */
-
 .page {
   max-width: 1180px;
   margin: 0 auto;
@@ -957,12 +945,6 @@ input[aria-invalid='true'] {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.55;
-}
-.page-hero.center {
-  text-align: center;
-}
-.page-hero.center p {
-  margin: 0 auto;
 }
 .page-hero.row {
   display: flex;
@@ -1143,20 +1125,6 @@ input[aria-invalid='true'] {
     margin-top: 0;
   }
 }
-
-.done-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: var(--ok-soft);
-  border: 1px solid var(--ok-line);
-  color: var(--ok-ink);
-  font-size: 11px;
-  font-weight: 700;
-}
-
 .profile-card {
   padding: 24px;
 }
@@ -1203,7 +1171,6 @@ input[aria-invalid='true'] {
 }
 
 /* ================================================================== KPIs, tables, admin */
-
 .kpi-row,
 .kpi-grid {
   display: grid;
@@ -1260,7 +1227,6 @@ input[aria-invalid='true'] {
   color: var(--muted);
   font-size: 12.5px;
 }
-
 .status-chip {
   display: inline-flex;
   align-items: center;
@@ -1296,7 +1262,6 @@ input[aria-invalid='true'] {
 .status-chip.recent i {
   background: #f59e0b;
 }
-
 .table-panel {
   overflow: hidden;
 }
@@ -1379,7 +1344,6 @@ input[aria-invalid='true'] {
   padding: 10px 16px;
   border-top: 1px solid var(--line-soft);
 }
-
 .detail-head {
   display: flex;
   flex-wrap: wrap;
@@ -1493,7 +1457,6 @@ input[aria-invalid='true'] {
 }
 
 /* ================================================================== loading / error */
-
 .state-screen {
   display: grid;
   place-items: center;
@@ -1558,231 +1521,7 @@ input[aria-invalid='true'] {
   }
 }
 
-/* ================================================================== experiment pages */
-
-.lab-page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: calc(100vh - 62px);
-  padding: 12px 16px 16px;
-}
-.lab-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-}
-.lab-toolbar .back-link {
-  margin: 0;
-}
-.lab-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.lab-title h1 {
-  margin: 0;
-  font-size: 17px;
-}
-.gate-badge {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  font-family: var(--mono);
-  font-weight: 700;
-  font-size: 16px;
-  color: #fff;
-  background: linear-gradient(135deg, #3b82f6, #4f46e5);
-}
-.gate-badge.purple {
-  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-}
-.lab-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-left: auto;
-}
-.lab-actions .btn {
-  height: 38px;
-}
-
-.lab-grid {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  gap: 12px;
-  /* same positions as the hardware kit: procedure | display | output pins, then the qubit kit(s), then measurement */
-  grid-template-columns: 260px minmax(0, 1fr) 280px;
-  grid-template-rows: minmax(360px, 1fr) auto;
-  grid-template-areas:
-    'side viz out'
-    'kit  kit kit';
-}
-.lab-grid.layout-measure {
-  grid-template-rows: minmax(340px, 1fr) auto auto;
-  grid-template-areas:
-    'side viz  out'
-    'kit  kit  kit'
-    'meas meas meas';
-}
-.lab-grid > .viz-panel {
-  grid-area: viz;
-}
-.lab-grid > .kit-panel,
-.lab-grid > .kit-row {
-  grid-area: kit;
-}
-.lab-grid > .measure-panel {
-  grid-area: meas;
-}
-.lab-side {
-  grid-area: side;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-}
-.lab-right {
-  grid-area: out;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-}
-.lab-right .state-panel {
-  flex: 1;
-}
-
-/* short laptop screens: tighter spacing so a whole lab fits with little or no scrolling */
-@media (min-width: 1025px) and (max-height: 820px) {
-  .lab-page {
-    gap: 8px;
-    padding: 8px 14px 10px;
-  }
-  .lab-grid {
-    gap: 10px;
-  }
-  .lab-grid.layout-measure {
-    grid-template-rows: minmax(300px, 1fr) auto auto;
-  }
-  .lab-right,
-  .lab-side,
-  .kit-row {
-    gap: 10px;
-  }
-  .steps li {
-    padding: 5px 8px;
-  }
-  .kit-body {
-    padding-top: 6px;
-    padding-bottom: 10px;
-  }
-  .measure-panel {
-    padding-top: 7px;
-    padding-bottom: 7px;
-  }
-}
-
-/* measurement lab: Single Qubit and Double Qubit side by side, as on the kit */
-.kit-row {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: 12px;
-  align-items: stretch;
-}
-
-/* output pins: the visualization terminals listed like the kit's output banana pins */
-.out-panel {
-  display: flex;
-  flex-direction: column;
-}
-.out-panel .viz-input-status {
-  white-space: normal;
-}
-.out-panel .viz-foot,
-.out-panel .viz-foot.ports-1 {
-  grid-template-columns: minmax(0, 1fr);
-  justify-items: stretch;
-  align-content: start;
-  gap: 8px;
-  padding: 2px 12px 12px;
-  border-top: 0;
-  background: none;
-}
-
 /* measurement row: one compact strip — shot controls, then the counts laid out across */
-.measure-panel {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 14px;
-}
-.measure-panel > .panel-head {
-  flex: none;
-  padding: 0;
-}
-.measure-body {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 16px;
-  min-width: 0;
-}
-.measure-body .measure-controls {
-  flex: none;
-  flex-wrap: nowrap;
-}
-.measure-body .measure-controls .btn {
-  width: auto;
-  height: 32px;
-  padding: 0 14px;
-}
-.measure-body .measure-table {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-}
-.measure-body .measure-head,
-.measure-body .measure-row {
-  flex: 1;
-  grid-template-columns: none;
-  grid-auto-rows: auto;
-  justify-items: center;
-  gap: 2px;
-  padding: 5px 10px;
-  border-top: 0;
-  border-left: 1px solid var(--line-soft);
-}
-.measure-body .measure-head {
-  flex: none;
-  justify-items: start;
-  border-left: 0;
-}
-.measure-body .measure-foot {
-  flex: none;
-  border-top: 0;
-  border-left: 1px solid var(--line-soft);
-  white-space: nowrap;
-}
-.graph-body.chart-only {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 6px;
-}
-.graph-body.chart-only .chart-legend {
-  justify-content: flex-end;
-}
-.lab-side .state-panel {
-  flex: 1;
-}
-
 .socket-hit {
   display: grid;
   place-items: center;
@@ -1804,66 +1543,6 @@ input[aria-invalid='true'] {
   outline: 2px solid var(--blue);
   outline-offset: 0;
 }
-
-.transition-chip.idle {
-  border-style: dashed;
-  color: var(--muted);
-  font-size: 11.5px;
-  white-space: normal;
-  max-width: 280px;
-}
-
-.steps-panel {
-  flex: none;
-}
-.steps-panel .panel-head {
-  align-items: center;
-}
-.steps {
-  list-style: none;
-  margin: 0;
-  padding: 0 12px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.steps li {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 7px 9px;
-  border-radius: 9px;
-  border: 1px solid var(--line);
-  background: var(--panel-2);
-  font-size: 12.5px;
-  line-height: 1.4;
-  transition:
-    background 0.3s,
-    border-color 0.3s;
-}
-.step-mark {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  background: var(--panel-3);
-  border: 1px solid var(--line-2);
-}
-.steps li.is-done {
-  border-color: var(--ok-line);
-  background: var(--ok-soft);
-}
-.steps li.is-done .step-mark {
-  color: #fff;
-  background: #10b981;
-  border-color: #10b981;
-}
-
 .toast-region {
   position: fixed;
   left: 0;
@@ -1875,19 +1554,8 @@ input[aria-invalid='true'] {
   padding: 0 12px;
   pointer-events: none;
 }
-.mode-indicator {
-  flex: none;
-}
-.mode-indicator span {
-  white-space: nowrap;
-}
-.viz-foot.ports-1 {
-  grid-template-columns: minmax(0, 1fr);
-  justify-items: center; /* keeps the single input near the kit's gate output */
-}
 
 /* ================================================================== responsive */
-
 @media (pointer: coarse) {
   /* comfortable touch targets for banana terminals and cable handles */
   .socket-hit,
@@ -1904,7 +1572,6 @@ input[aria-invalid='true'] {
     opacity: 0.85;
   }
 }
-
 @media (max-width: 1180px) {
   .kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1916,38 +1583,8 @@ input[aria-invalid='true'] {
 
 /* tablets: labs become a single column */
 @media (max-width: 1024px) {
-  .lab-page {
-    min-height: 0;
-  }
-  .lab-grid,
-  .lab-grid.layout-measure {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: none;
-    grid-template-areas:
-      'viz'
-      'out'
-      'kit'
-      'meas'
-      'side';
-  }
-  .lab-right {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
-  }
-  .kit-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .lab-side {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
-  }
   .bloch-panel {
     height: clamp(360px, 62vw, 560px);
-  }
-  .graph-panel .graph-body {
-    min-height: 300px;
   }
   .detail-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -2026,6 +1663,7 @@ input[aria-invalid='true'] {
   .brand-sub {
     display: none;
   }
+
   /* the full product name wraps onto two compact lines instead of pushing the header controls */
   .brand-title {
     font-size: 12.5px;
@@ -2034,7 +1672,6 @@ input[aria-invalid='true'] {
   .page {
     padding: 16px 14px 48px;
   }
-  .lab-side,
   .profile-list,
   .exp-matrix {
     grid-template-columns: minmax(0, 1fr);
@@ -2064,97 +1701,11 @@ input[aria-invalid='true'] {
   }
 
   /* experiment pages */
-  .lab-page {
-    padding: 10px 10px 80px;
-  }
-  .lab-actions {
-    width: 100%;
-    margin-left: 0;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .lab-actions .btn {
-    height: 44px;
-    justify-content: center;
-    padding: 0 6px;
-    font-size: 12.5px;
-  }
   .bloch-panel {
     height: clamp(340px, 100vw, 460px);
   }
-  .panel-head {
-    padding: 10px 12px 0;
-  }
-  .kit-panel .panel-head {
-    flex-direction: column;
-    gap: 4px;
-  }
-  .kit-body {
-    gap: 10px;
-    padding: 8px 10px 12px;
-  }
-  .out-col,
-  .double-body .out-col {
-    display: none;
-  }
-  .source-stack {
-    padding: 8px;
-    gap: 10px;
-  }
-  .ket-lg {
-    font-size: 15px;
-  }
-  .gate {
-    width: auto;
-    min-width: 92px;
-    height: 48px;
-    padding: 0 10px;
-  }
-  .trace {
-    width: 10px;
-  }
-  .gate.cnot-gate {
-    width: 88px;
-    min-width: 0;
-    height: 104px;
-    padding: 6px;
-  }
-  .cnot-ports .socket-label {
-    display: none;
-  }
-  .double-body {
-    gap: 6px;
-    padding-inline: 8px;
-  }
-  .dq-sources {
-    padding: 6px;
-  }
-  .qubit-group {
-    gap: 4px;
-  }
-  .cnot-row {
-    gap: 2px;
-  }
-  .graph-body {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 8px 10px 10px;
-  }
-  .measure-panel,
-  .measure-body {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .measure-body .measure-controls {
-    flex-wrap: wrap;
-  }
-  .lab-right {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .prob-chart {
     height: 240px;
-  }
-  .viz-foot {
-    grid-template-columns: minmax(0, 1fr);
   }
   .bloch-cell-tag {
     top: 70px;
@@ -2200,20 +1751,6 @@ input[aria-invalid='true'] {
     text-align: left;
   }
 }
-
-@media (max-width: 380px) {
-  .gate-name {
-    display: none;
-  }
-  .gate {
-    min-width: 56px;
-    justify-content: center;
-  }
-  .lab-actions .btn {
-    font-size: 11.5px;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

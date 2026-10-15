@@ -1,0 +1,901 @@
+/* Experiment pages: a copy of the hardware kit's front panel (white board, black outlines, coloured labels). */
+
+.kit-page {
+  --hw-line: #1f1f1f;
+  --hw-ink: #4b4fa0;
+  height: calc(100dvh - 62px);
+  min-height: 600px;
+  padding: 6px 12px 8px;
+  display: flex;
+  justify-content: center;
+}
+
+/* ================================================================== board */
+
+.hw {
+  position: relative;
+  width: 100%;
+  max-width: 1380px;
+  height: 100%;
+  padding: 8px;
+  border: 1px solid #d6d9df;
+  border-radius: 14px;
+  background: #fcfcfc;
+  box-shadow:
+    0 14px 34px -18px rgba(15, 23, 42, 0.35),
+    0 2px 6px rgba(15, 23, 42, 0.06);
+  user-select: none;
+}
+.hw-screw {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid #9ca3af;
+  border-radius: 50%;
+  background: #f3f4f6;
+}
+.hw-screw.tl {
+  top: 3px;
+  left: 3px;
+}
+.hw-screw.tr {
+  top: 3px;
+  right: 3px;
+}
+.hw-screw.bl {
+  bottom: 3px;
+  left: 3px;
+}
+.hw-screw.br {
+  bottom: 3px;
+  right: 3px;
+}
+.hw-frame {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  padding: 8px 12px 10px;
+  border: 2.5px solid var(--hw-line);
+  border-radius: 16px;
+}
+.hw-title {
+  flex: none;
+  align-self: center;
+  margin: 0 0 7px;
+  padding: 1px 28px;
+  border-radius: 3px;
+  background: #5b5ea6;
+  color: #ffffff;
+  font-family: 'Times New Roman', Georgia, serif;
+  font-size: clamp(14px, 1.5vw, 21px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+/* shared box styles */
+.hw-box {
+  position: relative;
+  border: 2px solid var(--hw-line);
+  border-radius: 12px;
+  background: #ffffff;
+}
+.hw-section {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+  padding: 16px 12px 8px;
+  border: 2px solid var(--hw-line);
+  border-radius: 14px;
+  background: #ffffff;
+}
+.hw-tab {
+  position: absolute;
+  top: -13px;
+  left: 22px;
+  margin: 0;
+  padding: 1px 12px;
+  border: 2px solid var(--hw-line);
+  border-radius: 10px;
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+}
+.t-single {
+  color: #6f9a72;
+}
+.t-double {
+  color: #a3568c;
+}
+.t-measure {
+  color: #8d8ac0;
+}
+.t-power {
+  color: #e5532b;
+}
+.hw-txt {
+  color: var(--hw-ink);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* ================================================================== top row: buttons · TFT · output pins */
+
+.hw-top {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 220px;
+  gap: 14px;
+}
+.hw-modes {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+}
+.hw-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px;
+}
+.hw-mode-name {
+  color: var(--hw-ink);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+}
+.hw-tft {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 14px 12px;
+}
+.hw-tft-name {
+  flex: none;
+  margin-bottom: 5px;
+  color: var(--hw-ink);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.hw-screen {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 2.5px solid var(--hw-line);
+  border-radius: 3px;
+  background: #ffffff;
+}
+.hw-pins {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+.hw-pins-title {
+  margin: 0;
+  padding: 7px 8px;
+  border-bottom: 2px solid var(--hw-line);
+  color: var(--hw-ink);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+.hw-pins ul {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-evenly;
+  margin: 0;
+  padding: 6px 18px;
+  list-style: none;
+}
+
+/* the gap between the rows doubles as the cable channel to the output pins */
+.hw-channel {
+  flex: none;
+  height: 22px;
+}
+
+/* ================================================================== middle row: single + double qubit */
+
+.hw-mid {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+.lab-measurement .hw-mid {
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+}
+.hw-init {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 4px;
+  min-width: 118px;
+  padding: 6px 14px 8px;
+}
+.hw-init-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+.hw-ket {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 700;
+}
+.hw-ket.zero {
+  color: #1f1f1f;
+}
+.hw-ket.one {
+  color: #e03a3a;
+}
+.hw-gates {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 10px;
+  max-width: 520px;
+  padding-top: 4px;
+}
+.hw-gate {
+  --g: #5b4fc4;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 1px 12px 0;
+  border: 2px solid var(--hw-line);
+  border-radius: 10px;
+  transition: box-shadow 0.25s;
+}
+.hw-gate.g-h {
+  --g: #c2399c;
+}
+.hw-gate.g-z {
+  --g: #f0912f;
+}
+.hw-gate.is-active {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--g) 28%, transparent);
+}
+.hw-gate-tab {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  padding: 0 8px;
+  border: 1.5px solid var(--hw-line);
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--g);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 15px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.hw-badge {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 26px;
+  border-radius: 2px;
+  background: var(--g);
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.hw-init.two {
+  min-width: 0;
+}
+.hw-init-grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 2px 16px;
+}
+.hw-qname {
+  color: #a3568c;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+.hw-cnot {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px 6px;
+  transition: box-shadow 0.25s;
+}
+.hw-cnot.is-active {
+  box-shadow: 0 0 0 3px rgba(163, 86, 140, 0.25);
+}
+.hw-cnot-grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    'q0in sym q0out'
+    'q1in sym q1out';
+  align-items: center;
+  gap: 4px 12px;
+}
+.hw-cnot-grid > :nth-child(1) {
+  grid-area: q0in;
+}
+.hw-cnot-grid > :nth-child(2) {
+  grid-area: sym;
+}
+.hw-cnot-grid > :nth-child(3) {
+  grid-area: q0out;
+}
+.hw-cnot-grid > :nth-child(4) {
+  grid-area: q1in;
+}
+.hw-cnot-grid > :nth-child(5) {
+  grid-area: q1out;
+}
+.hw-cnot-symbol {
+  justify-self: center;
+  width: 58px;
+  height: 50px;
+  fill: none;
+  stroke: var(--hw-line);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.hw-cnot-symbol .dot {
+  fill: var(--hw-line);
+}
+.hw-caption {
+  color: var(--hw-ink);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ================================================================== bottom row: measurement + power */
+
+.hw-bottom {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 14px;
+  margin-top: 20px;
+}
+.hw-measure {
+  align-items: center;
+  justify-content: space-around;
+  padding: 12px 14px 4px;
+}
+.hw-push {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.hw-push-name {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.hw-power {
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 12px 14px 4px;
+}
+.hw-power-name {
+  color: #e5532b;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* ================================================================== controls */
+
+.hw-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #4a4a4a, #111111 70%);
+  box-shadow:
+    0 3px 5px rgba(0, 0, 0, 0.35),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  touch-action: none;
+  transition: box-shadow 0.2s;
+}
+.hw-btn-cap {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 30%, #3a3a3a, #0b0b0b 70%);
+  box-shadow:
+    0 2px 0 #000000,
+    inset 0 1px 1px rgba(255, 255, 255, 0.18);
+  transition:
+    transform 0.08s,
+    box-shadow 0.08s;
+}
+.hw-btn:active:not(:disabled) .hw-btn-cap {
+  transform: translateY(2px);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.hw-btn.is-active {
+  box-shadow:
+    0 0 0 3px rgba(91, 94, 166, 0.45),
+    0 3px 5px rgba(0, 0, 0, 0.35);
+}
+.hw-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+.hw-btn:focus-visible,
+.hw-rocker:focus-visible {
+  outline: 2px solid #5b5ea6;
+  outline-offset: 3px;
+}
+.hw-rocker {
+  padding: 3px;
+  border: 0;
+  border-radius: 4px;
+  background: #111111;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+.hw-rocker-body {
+  display: flex;
+  width: 24px;
+  height: 40px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-around;
+  border-radius: 2px;
+  background: linear-gradient(#2c2c2c, #0e0e0e);
+  box-shadow: inset 0 -8px 8px rgba(0, 0, 0, 0.45);
+  color: #dddddd;
+  font: 700 11px var(--mono);
+}
+.hw-rocker.is-on .hw-rocker-body {
+  box-shadow: inset 0 8px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* jacks: slightly tighter touch area on the panel so every section fits on screen */
+.hw .socket-hit.size-lg {
+  width: 36px;
+  height: 36px;
+}
+
+/* jack colours of the kit */
+.tone-black {
+  --tone: #262626;
+}
+.tone-red {
+  --tone: #d93025;
+}
+.tone-blue {
+  --tone: #1f3fbf;
+}
+.tone-yellow {
+  --tone: #f2c200;
+}
+.tone-grey {
+  --tone: #9aa0a6;
+}
+
+/* ================================================================== TFT screen */
+
+.tft-off {
+  flex: 1;
+  background: #0b0b0d;
+}
+.tft-boot {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: radial-gradient(circle at 50% 40%, #eef2ff, #ffffff 70%);
+  color: #3730a3;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tft-boot-bar {
+  width: 45%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #e0e7ff;
+}
+.tft-boot-bar span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: #5b5ea6;
+  animation: tft-boot 1.2s ease-in-out forwards;
+}
+@keyframes tft-boot {
+  to {
+    width: 100%;
+  }
+}
+.tft-ui {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+.tft-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+  font-size: 11px;
+}
+.tft-mode {
+  color: #3730a3;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.tft-chip {
+  overflow: hidden;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-family: var(--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tft-phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: #475569;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.tft-phase i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+.tft-phase.ok i {
+  background: #10b981;
+}
+.tft-phase.idle i {
+  background: #94a3b8;
+}
+.tft-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.tft-foot {
+  flex: none;
+  overflow: hidden;
+  padding: 4px 10px;
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tft-foot.info {
+  background: #eef2ff;
+  color: #3730a3;
+}
+.tft-foot.warn {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+/* Bloch sphere mode */
+.tft-bloch {
+  display: grid;
+  height: 100%;
+  grid-template-columns: minmax(0, 1fr) 180px;
+}
+.tft-sphere {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  background: var(--bloch-bg);
+  cursor: grab;
+}
+.tft-sphere .bloch-stage {
+  position: absolute;
+  inset: 0;
+}
+.tft-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.55);
+  color: #475569;
+  font-size: 14px;
+  font-weight: 700;
+  pointer-events: none;
+}
+.tft-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  overflow: auto;
+  padding: 6px 12px;
+  border-left: 1px solid #e5e7eb;
+}
+.tft-info dt {
+  color: #94a3b8;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.tft-info dd {
+  margin: 0;
+  color: #0f172a;
+  font-family: var(--mono);
+  font-size: 14px;
+}
+.tft-info .tft-state dd {
+  color: #4338ca;
+  font-size: 24px;
+  font-weight: 700;
+}
+.tft-info dd.wait {
+  color: #b45309;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+}
+.tft-cnot {
+  display: grid;
+  height: 100%;
+  grid-template-columns: 1fr 1fr;
+}
+.tft-qubit {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+.tft-qubit + .tft-qubit {
+  border-left: 1px solid #e5e7eb;
+}
+.tft-qubit-name {
+  padding: 4px 8px 0;
+  color: #a3568c;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.tft-qubit .tft-sphere {
+  flex: 1;
+  height: auto;
+}
+.tft-qline {
+  padding: 2px 8px 5px;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+.tft-qline b {
+  color: #0f172a;
+  font-family: var(--mono);
+  font-size: 14px;
+}
+
+/* probability graph mode */
+.tft-graph {
+  display: grid;
+  height: 100%;
+  grid-template-columns: minmax(0, 1fr) 190px;
+}
+.tft-chart {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: 4px 8px 0;
+}
+.tft-chart .prob-chart {
+  flex: 1;
+  min-height: 0;
+}
+.tft-switch {
+  display: inline-flex;
+  align-self: flex-end;
+  padding: 2px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f1f5f9;
+}
+.tft-switch button {
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tft-switch button.is-on {
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.15);
+  color: #3730a3;
+}
+.tft-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-left: 1px solid #e5e7eb;
+}
+.tft-total span {
+  display: block;
+  color: #94a3b8;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.tft-total b {
+  color: #4338ca;
+  font-family: var(--mono);
+  font-size: 24px;
+}
+.tft-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.tft-table th,
+.tft-table td {
+  padding: 3px 4px;
+  border-bottom: 1px dashed #e5e7eb;
+  text-align: right;
+}
+.tft-table th:first-child {
+  text-align: left;
+}
+.tft-table thead th {
+  color: #94a3b8;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.tft-table tbody th,
+.tft-table td {
+  font-family: var(--mono);
+}
+.tft-table tr.last {
+  background: #eef2ff;
+}
+.tft-graph-empty {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  padding: 16px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ================================================================== smaller screens */
+
+/* tablets and phones: the panel stacks and the page scrolls */
+@media (max-width: 1000px) {
+  .kit-page {
+    height: auto;
+    min-height: 0;
+    padding: 8px;
+  }
+  .hw {
+    height: auto;
+  }
+  .hw-top,
+  .lab-measurement .hw-mid,
+  .hw-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hw-top {
+    grid-template-rows: auto;
+  }
+  .hw-tft {
+    order: -1;
+  }
+  .hw-screen {
+    height: 340px;
+    flex: none;
+  }
+  .hw-modes {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: none;
+  }
+  .hw-mid,
+  .hw-bottom {
+    gap: 26px;
+  }
+  .hw-section {
+    flex-wrap: wrap;
+  }
+  .tft-bloch,
+  .tft-graph {
+    grid-template-columns: minmax(0, 1fr) 150px;
+  }
+}
+@media (max-width: 560px) {
+  .tft-bloch,
+  .tft-graph {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .tft-info,
+  .tft-stats {
+    border-left: 0;
+    border-top: 1px solid #e5e7eb;
+  }
+  .hw-screen {
+    height: 420px;
+  }
+  .hw-init {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .hw-gates {
+    max-width: none;
+  }
+  .hw-title {
+    padding: 2px 10px;
+    text-align: center;
+  }
+}

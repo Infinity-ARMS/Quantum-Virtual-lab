@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { blochVector, basis } from '../quantum/singleQubit'
-import { activeSingleGate, gateInput, tryConnect, vizSignal, type Connection } from './circuit'
+import { activeSingleGate, gateInput, outputWired, tryConnect, vizSignal, type Connection } from './circuit'
 import { qubitView } from './readout'
 
 type V = [number, number, number]
@@ -81,8 +81,17 @@ describe('kit wiring rules', () => {
     expect(activeSingleGate(wire(['s.src0', 's.X.in'], ['s.src1', 's.X.in']))).toBe('X')
     // both CNOT inputs belong to one experiment
     const cnot = wire(['d.q0.src1', 'd.cnot.cin'], ['d.q1.src0', 'd.cnot.tin'])
-    expect(refused(cnot, 's.src0', 's.H.in')).toMatch(/unplug the CNOT control IN/)
+    expect(refused(cnot, 's.src0', 's.H.in')).toMatch(/unplug the CNOT Q0 IN/)
     expect(activeSingleGate(cnot)).toBeNull()
+  })
+
+  it('each gate OUT goes to its own output banana pin, as on the kit', () => {
+    expect(wire(['s.src0', 's.H.in'], ['s.H.out', 'pin.H'])).toHaveLength(2)
+    expect(outputWired(wire(['s.src0', 's.H.in'], ['s.H.out', 'pin.H']), 's.H.out')).toBe(true)
+    expect(refused([], 's.H.out', 'pin.X')).toMatch(/H OUT connects to the H OUT pin$/)
+    expect(refused([], 'd.cnot.cout', 'pin.q1')).toMatch(/connects to the CNOT Q0 OUT pin/)
+    expect(refused([], 's.src0', 'pin.H')).toMatch(/gate IN first/)
+    expect(wire(['d.cnot.cout', 'pin.q0'], ['d.cnot.tout', 'pin.q1'])).toHaveLength(2)
   })
 
   it('each CNOT line takes its own initial states', () => {
