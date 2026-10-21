@@ -2,7 +2,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { analytics } from '../analytics/analyticsService'
-import { useAuth } from '../auth/AuthContext'
+import { authProvider, useAuth } from '../auth/AuthContext'
+import { HOME_FOR, type Role } from '../auth/types'
 import { BrandMark } from './BrandMark'
 import { ErrorBoundary, LoadingScreen } from './ErrorBoundary'
 import { initials } from './format'
@@ -12,10 +13,15 @@ const STUDENT_NAV = [
   { to: '/student/bloch', label: 'Bloch Sphere Lab', end: false },
   { to: '/student/measurement', label: 'Measurement Lab', end: false },
 ]
+const TEACHER_NAV = [{ to: '/teacher', label: 'My Students', end: false }]
 const ADMIN_NAV = [
   { to: '/admin', label: 'Student Analytics', end: true },
   { to: '/admin/users', label: 'Users & Roles', end: false },
 ]
+const NAV: Record<Role, { to: string; label: string; end: boolean }[]> = { student: STUDENT_NAV, teacher: TEACHER_NAV, admin: ADMIN_NAV }
+const SUBTITLE: Record<Role, string> = { student: 'Virtual Quantum Development Kit', teacher: 'Teacher Console', admin: 'Admin Console' }
+/** The line under the name in the profile menu. */
+const idLine = (role: Role, userId: string) => (role === 'admin' ? 'Administrator' : role === 'teacher' ? 'Teacher' : `Student ID: ${userId}`)
 
 function useOutsideClose(open: boolean, close: () => void) {
   const ref = useRef<HTMLDivElement>(null)
@@ -33,11 +39,20 @@ function useOutsideClose(open: boolean, close: () => void) {
   return ref
 }
 
-function ProfileMenu({ role }: { role: 'student' | 'admin' }) {
+function ProfileMenu({ role }: { role: Role }) {
   const { session, logout } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  // a student's linked teacher (from the server), looked up when the menu is first opened
+  const [teacher, setTeacher] = useState<string | null | undefined>(undefined)
   const ref = useOutsideClose(open, () => setOpen(false))
+  useEffect(() => {
+    if (!open || role !== 'student' || teacher !== undefined) return
+    authProvider
+      .getProfile()
+      .then((p) => setTeacher(p.teacher?.name ?? null))
+      .catch(() => undefined)
+  }, [open, role, teacher])
   if (!session) return null
   return (
     <div className="profile-menu" ref={ref}>
@@ -53,7 +68,7 @@ function ProfileMenu({ role }: { role: 'student' | 'admin' }) {
         </span>
         <span className="profile-text">
           <span className="profile-name">{session.displayName}</span>
-          <span className="profile-id">{role === 'admin' ? 'Administrator' : `Student ID: ${session.userId}`}</span>
+          <span className="profile-id">{idLine(role, session.userId)}</span>
         </span>
         <span className="chev" aria-hidden>
           ▾
@@ -71,7 +86,8 @@ function ProfileMenu({ role }: { role: 'student' | 'admin' }) {
           >
             <div className="menu-head">
               <strong>{session.displayName}</strong>
-              <span>{role === 'admin' ? 'Administrator' : session.userId}</span>
+              <span>{role === 'student' ? session.userId : idLine(role, session.userId)}</span>
+              {role === 'student' && teacher !== undefined && <span>Teacher: {teacher ?? 'not linked'}</span>}
             </div>
             {role === 'student' && (
               <Link role="menuitem" to="/student/profile" className="menu-item" onClick={() => setOpen(false)}>
@@ -98,12 +114,12 @@ function ProfileMenu({ role }: { role: 'student' | 'admin' }) {
 }
 
 /** Authenticated layout: compact scientific header, desktop nav, mobile drawer, routed content. */
-export function AppShell({ role }: { role: 'student' | 'admin' }) {
+export function AppShell({ role }: { role: Role }) {
   const { session, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [drawer, setDrawer] = useState(false)
-  const nav = role === 'student' ? STUDENT_NAV : ADMIN_NAV
+  const nav = NAV[role]
 
   useEffect(() => {
     setDrawer(false)
@@ -116,11 +132,11 @@ export function AppShell({ role }: { role: 'student' | 'admin' }) {
         Skip to content
       </a>
       <header className="shell-header">
-        <Link to={role === 'student' ? '/student' : '/admin'} className="brand" aria-label="Quantum Logic and Measurement Emulator home">
+        <Link to={HOME_FOR[role]} className="brand" aria-label="Quantum Logic and Measurement Emulator home">
           <BrandMark />
           <span className="brand-text">
             <span className="brand-title">Quantum Logic and Measurement Emulator</span>
-            <span className="brand-sub">{role === 'admin' ? 'Admin Console' : 'Virtual Quantum Development Kit'}</span>
+            <span className="brand-sub">{SUBTITLE[role]}</span>
           </span>
         </Link>
         <nav className="shell-nav" aria-label="Primary">
@@ -168,7 +184,7 @@ export function AppShell({ role }: { role: 'student' | 'admin' }) {
               </span>
               <span>
                 <strong>{session.displayName}</strong>
-                <span>{role === 'admin' ? 'Administrator' : `Student ID: ${session.userId}`}</span>
+                <span>{idLine(role, session.userId)}</span>
               </span>
             </div>
             {nav.map((n) => (

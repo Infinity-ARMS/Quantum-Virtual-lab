@@ -2,9 +2,8 @@ import { useId, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { BrandMark } from '../../app/BrandMark'
 import { useAuth } from '../../auth/AuthContext'
-import { AuthError } from '../../auth/types'
+import { AuthError, HOME_FOR } from '../../auth/types'
 
-const homeFor = (role: 'student' | 'admin') => (role === 'admin' ? '/admin' : '/student')
 const COLLEGE_DOMAIN = '@sakec.ac.in'
 // mirrors the server rule; the server check is the one that counts
 const COLLEGE_EMAIL = /^[a-z0-9](?:[a-z0-9._%+-]{0,63})@sakec\.ac\.in$/
@@ -45,11 +44,12 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
+  const [teacherCode, setTeacherCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const uid = useId()
 
-  if (session) return <Navigate to={homeFor(session.role)} replace />
+  if (session) return <Navigate to={HOME_FOR[session.role]} replace />
 
   const from = (location.state as { from?: string } | null)?.from
   const switchMode = (create: boolean) => {
@@ -73,8 +73,10 @@ export default function LoginPage() {
     setBusy(true)
     setError(null)
     try {
-      const s = creating ? await register({ name: name.trim(), email: id, password }) : await login(id, password)
-      const home = homeFor(s.role)
+      const s = creating
+        ? await register({ name: name.trim(), email: id, password, ...(teacherCode.trim() ? { teacherCode: teacherCode.trim() } : {}) })
+        : await login(id, password)
+      const home = HOME_FOR[s.role]
       navigate(from?.startsWith(home) ? from : home, { replace: true })
     } catch (err) {
       setError(err instanceof AuthError ? err.message : 'The lab is unavailable right now. Please try again.')
@@ -163,6 +165,29 @@ export default function LoginPage() {
                 invalid={!!error}
                 describedBy={errId}
               />
+            </>
+          )}
+
+          {creating && (
+            <>
+              <label htmlFor={`${uid}-teacher`}>
+                Teacher Reference ID <span className="label-opt">optional</span>
+              </label>
+              <input
+                id={`${uid}-teacher`}
+                name="teacherCode"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                placeholder="Enter your teacher's reference ID"
+                value={teacherCode}
+                maxLength={20}
+                onChange={(e) => setTeacherCode(e.target.value)}
+                aria-describedby={`${uid}-teacher-hint`}
+              />
+              <p id={`${uid}-teacher-hint`} className="field-hint">
+                Looks like QL-TEA-8K42. You can also add it later from your profile.
+              </p>
             </>
           )}
 

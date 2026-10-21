@@ -29,4 +29,9 @@ function apiDevServer(env: Record<string, string>): Plugin {
 export default defineConfig(({ mode }) => ({
   // '' prefix: server-only variables (AUTH_SECRET…) are read here but never exposed to client code
   plugins: [react(), apiDevServer(loadEnv(mode, process.cwd(), ''))],
+  build: {
+    // the one large chunk is three.js for the Bloch sphere (~950 kB, ~250 kB gzipped); it is loaded lazily, only
+    // when a sphere is on screen, so it never delays the first page — anything else above this limit still warns
+    chunkSizeWarningLimit: 1000,
+  },
 }))

@@ -1,5 +1,8 @@
-/** UI role names. The server's roles are 'user' (shown as student) and 'admin'. */
-export type Role = 'student' | 'admin'
+/** UI role names. The server's roles are 'user' (shown as student), 'teacher' and 'admin'. */
+export type Role = 'student' | 'teacher' | 'admin'
+
+/** Where each role lands after signing in. */
+export const HOME_FOR: Record<Role, string> = { student: '/student', teacher: '/teacher', admin: '/admin' }
 
 /** What the UI knows about the signed-in user. Never contains credentials or the session token. */
 export interface AuthSession {
@@ -15,6 +18,8 @@ export interface StudentProfile {
   course: string
   institution: string
   status: 'enrolled' | 'suspended'
+  /** The teacher this student is linked to (name only), resolved by the server. */
+  teacher?: { name: string } | null
 }
 
 export type ProfileUpdate = Partial<Pick<StudentProfile, 'name' | 'course' | 'institution'>>
@@ -25,6 +30,8 @@ export interface RegisterInput {
   email: string
   password: string
   course?: string
+  /** Optional teacher reference ID (e.g. QL-TEA-8K42); the server resolves the teacher from it. */
+  teacherCode?: string
 }
 
 export class AuthError extends Error {}
@@ -43,4 +50,6 @@ export interface AuthProvider {
   restore(): Promise<AuthSession | null>
   getProfile(): Promise<StudentProfile>
   updateProfile(update: ProfileUpdate): Promise<StudentProfile>
+  /** Link the signed-in student to the teacher who owns this reference ID; returns the teacher's name. */
+  linkTeacher(code: string): Promise<{ name: string }>
 }

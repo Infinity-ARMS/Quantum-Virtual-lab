@@ -2,11 +2,15 @@ import { useMemo, useState } from 'react'
 import { ApiError } from '../../api/client'
 import { fmtDateTime, fmtRelative } from '../../app/format'
 import { useAuth } from '../../auth/AuthContext'
-import { changeRole, loadAccounts, useLiveData, type Account } from './useAdminData'
+import { changeRole, changeTeacherCode, loadAccounts, useLiveData, type Account } from './useAdminData'
 
-const ROLE_LABEL: Record<Account['role'], string> = { user: 'Student', admin: 'Admin' }
+const ROLE_LABEL: Record<Account['role'], string> = { user: 'Student', teacher: 'Teacher', admin: 'Admin' }
+const AS_ROLE: Record<Account['role'], string> = { user: 'a student', teacher: 'a teacher', admin: 'an admin' }
 
-/** Admins decide who is a student and who is an admin. The server enforces this (requireAdmin) and audits it. */
+/**
+ * Admins decide who is a student, a teacher or an admin. The server enforces this (requireAdmin) and audits it;
+ * a new teacher receives a reference ID that students link with.
+ */
 export default function AdminUsers() {
   const { session } = useAuth()
   const { data, error, updatedAt, refresh } = useLiveData(loadAccounts, [])
@@ -24,20 +28,41 @@ export default function AdminUsers() {
     )
   }, [data, query, filter])
 
-  const admins = (data ?? []).filter((u) => u.role === 'admin').length
+  const count = (role: Account['role']) => (data ?? []).filter((u) => u.role === role).length
 
   const update = async (u: Account, role: Account['role']) => {
     if (role === u.role) return
-    const verb = role === 'admin' ? 'Give admin access to' : 'Remove admin access from'
-    if (!window.confirm(`${verb} ${u.name} (${u.email || u.id})? They will need to sign in again.`)) return
+    const extra =
+      role === 'teacher'
+        ? ' They will get a teacher reference ID for their students.'
+        : u.role === 'teacher'
+          ? ' Their reference ID will stop working.'
+          : ''
+    if (!window.confirm(`Make ${u.name} (${u.email || u.id}) ${AS_ROLE[role]}?${extra} They will need to sign in again.`)) return
     setPending(u.id)
     setNotice(null)
     try {
       await changeRole(u.id, role)
-      setNotice({ ok: true, text: `${u.name} is now ${role === 'admin' ? 'an admin' : 'a student'}.` })
+      setNotice({ ok: true, text: `${u.name} is now ${AS_ROLE[role]}.` })
       refresh()
     } catch (err) {
       setNotice({ ok: false, text: err instanceof ApiError ? err.message : 'The role could not be changed.' })
+    } finally {
+      setPending(null)
+    }
+  }
+
+  const codeAction = async (u: Account, action: 'disable' | 'enable' | 'regenerate') => {
+    if (action === 'regenerate' && !window.confirm(`Replace the reference ID of ${u.name}? The old ID stops working; linked students stay linked.`))
+      return
+    setPending(u.id)
+    setNotice(null)
+    try {
+      const c = await changeTeacherCode(u.id, action)
+      setNotice({ ok: true, text: `Reference ID ${c.code} of ${u.name} is ${c.status === 'active' ? 'active' : 'disabled'}.` })
+      refresh()
+    } catch (err) {
+      setNotice({ ok: false, text: err instanceof ApiError ? err.message : 'The reference ID could not be changed.' })
     } finally {
       setPending(null)
     }
@@ -50,8 +75,8 @@ export default function AdminUsers() {
           <span className="micro-label">Admin Console</span>
           <h1>Users &amp; Roles</h1>
           <p>
-            Everyone who signs up starts as a student. Choose who should have admin access; changes take effect at their next
-            sign-in.
+            Everyone who signs up starts as a student. Choose who is a teacher or an admin; changes take effect at their next sign-in.
+            Teachers get a reference ID that their students link with.
           </p>
         </div>
         <button type="button" className="btn" onClick={refresh}>
@@ -70,18 +95,22 @@ export default function AdminUsers() {
         </p>
       )}
 
-      <div className="kpi-grid">
+      <div className="kpi-grid four">
         <div className="kpi">
           <span>Total Accounts</span>
           <b>{data?.length ?? '—'}</b>
         </div>
         <div className="kpi">
           <span>Students</span>
-          <b>{data ? data.length - admins : '—'}</b>
+          <b>{data ? count('user') : '—'}</b>
+        </div>
+        <div className="kpi">
+          <span>Teachers</span>
+          <b>{data ? count('teacher') : '—'}</b>
         </div>
         <div className="kpi">
           <span>Admins</span>
-          <b>{data ? admins : '—'}</b>
+          <b>{data ? count('admin') : '—'}</b>
         </div>
       </div>
 
@@ -105,6 +134,7 @@ export default function AdminUsers() {
             <select id="role-filter" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
               <option value="all">All roles</option>
               <option value="user">Students</option>
+              <option value="teacher">Teachers</option>
               <option value="admin">Admins</option>
             </select>
           </div>
@@ -123,6 +153,7 @@ export default function AdminUsers() {
                   <th scope="col">ID</th>
                   <th scope="col">Joined</th>
                   <th scope="col">Last Sign-in</th>
+                  <th scope="col">Teacher / Reference ID</th>
                   <th scope="col">Role</th>
                 </tr>
               </thead>
@@ -143,6 +174,28 @@ export default function AdminUsers() {
                       <td data-label="Last Sign-in" title={u.lastLoginAt ? fmtDateTime(u.lastLoginAt) : undefined}>
                         {u.lastLoginAt ? fmtRelative(u.lastLoginAt) : <span className="muted">Never</span>}
                       </td>
+                      <td data-label={u.role === 'teacher' ? 'Reference ID' : 'Teacher'}>
+                        {u.role === 'teacher' && u.teacherCode ? (
+                          <span className="code-cell">
+                            <code className={u.teacherCode.status === 'active' ? '' : 'off'}>{u.teacherCode.code}</code>
+                            <button
+                              type="button"
+                              className="link-btn small"
+                              disabled={pending === u.id}
+                              onClick={() => void codeAction(u, u.teacherCode!.status === 'active' ? 'disable' : 'enable')}
+                            >
+                              {u.teacherCode.status === 'active' ? 'Disable' : 'Enable'}
+                            </button>
+                            <button type="button" className="link-btn small" disabled={pending === u.id} onClick={() => void codeAction(u, 'regenerate')}>
+                              Replace
+                            </button>
+                          </span>
+                        ) : u.role === 'user' ? (
+                          (u.teacherName ?? <span className="muted">Not linked</span>)
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
                       <td data-label="Role">
                         {self ? (
                           <span className="role-chip admin" title="You cannot change your own role">
@@ -161,6 +214,7 @@ export default function AdminUsers() {
                               onChange={(e) => void update(u, e.target.value as Account['role'])}
                             >
                               <option value="user">Student</option>
+                              <option value="teacher">Teacher</option>
                               <option value="admin">Admin</option>
                             </select>
                           </>

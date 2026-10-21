@@ -1,4 +1,4 @@
-import { blochVector, nameFromBloch, probabilities } from '../quantum/singleQubit'
+import { blochVector, nameFromBloch, probabilities, stateName } from '../quantum/singleQubit'
 import { marginal, probabilities2, reducedBloch, swapQubits, TWO_QUBIT_LABELS } from '../quantum/twoQubit'
 import type { VizSignal } from './circuit'
 
@@ -26,7 +26,7 @@ export function qubitView(s: VizSignal): QubitView {
     vec,
     purity,
     name: purity > 0.999 ? nameFromBloch(vec) : null,
-    chain: [`|${s.reg.inputBits.join('')}⟩`, 'CNOT', `Q${s.line}`],
+    chain: [s.reg.lines.map((l) => stateName(l.state) ?? '|ψ⟩').join(' ⊗ '), 'CNOT', `Q${s.line}`],
   }
 }
 

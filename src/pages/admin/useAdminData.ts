@@ -1,60 +1,50 @@
-import { useCallback, useEffect, useState } from 'react'
-import { api, ApiError } from '../../api/client'
-import type { StudentDetail, StudentSummary } from '../../analytics/types'
+import { api } from '../../api/client'
+import type { StudentSummary } from '../../analytics/types'
 import type { StudentProfile } from '../../auth/types'
+import type { StudentDetailData } from '../shared/StudentDetailView'
 
-/** Re-run a loader now and every 15 s. */
-export function useLiveData<T>(load: () => Promise<T>, deps: unknown[]) {
-  const [data, setData] = useState<T | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [updatedAt, setUpdatedAt] = useState<number | null>(null)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const run = useCallback(load, deps)
-
-  const refresh = useCallback(() => {
-    run()
-      .then((d) => {
-        setData(d)
-        setError(null)
-        setUpdatedAt(Date.now())
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError && err.status === 404 ? 'not-found' : 'Data could not be loaded. Try Refresh.'),
-      )
-  }, [run])
-
-  useEffect(() => {
-    refresh()
-    const id = window.setInterval(refresh, 15_000)
-    return () => window.clearInterval(id)
-  }, [refresh])
-
-  return { data, error, updatedAt, refresh }
-}
+export { useLiveData } from '../shared/useLiveData'
 
 /** Admin-only endpoints; the server answers 401/403 for anyone else. */
 export async function loadRoster() {
-  return (await api<{ students: { profile: StudentProfile; summary: StudentSummary }[] }>('/admin/students')).students
+  return (await api<{ students: { profile: StudentProfile; teacher: { name: string } | null; summary: StudentSummary }[] }>('/admin/students'))
+    .students
+}
+
+export type Role = 'user' | 'teacher' | 'admin'
+
+export interface TeacherCode {
+  code: string
+  status: 'active' | 'disabled' | 'revoked'
+  updatedAt: number
 }
 
 export interface Account {
   id: string
   name: string
   email: string
-  role: 'user' | 'admin'
+  role: Role
   status: 'enrolled' | 'suspended'
   createdAt: number
   lastLoginAt: number | null
+  /** Students: the teacher they are linked to. */
+  teacherName: string | null
+  /** Teachers: their current reference ID. */
+  teacherCode: TeacherCode | null
 }
 
 export async function loadAccounts() {
   return (await api<{ users: Account[] }>('/admin/users')).users
 }
 
-export async function changeRole(id: string, role: Account['role']) {
+export async function changeRole(id: string, role: Role) {
   return (await api<{ user: Account }>(`/admin/users/${encodeURIComponent(id)}/role`, { method: 'PATCH', body: { role } })).user
 }
 
+export async function changeTeacherCode(id: string, action: 'disable' | 'enable' | 'regenerate') {
+  return (await api<{ code: TeacherCode }>(`/admin/teachers/${encodeURIComponent(id)}/code`, { method: 'PATCH', body: { action } })).code
+}
+
 export async function loadStudentDetail(id: string) {
-  return api<{ profile: StudentProfile; detail: StudentDetail }>(`/admin/students/${encodeURIComponent(id)}`)
+  return api<StudentDetailData>(`/admin/students/${encodeURIComponent(id)}`)
 }

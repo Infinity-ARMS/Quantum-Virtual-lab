@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { analytics } from '../../analytics/analyticsService'
 import { EXPERIMENTS, type ExperimentId, type StudentSummary } from '../../analytics/types'
 import { fmtDuration } from '../../app/format'
-import { useAuth } from '../../auth/AuthContext'
+import { authProvider, useAuth } from '../../auth/AuthContext'
 
 export function useOwnSummary() {
   const { session } = useAuth()
@@ -35,7 +35,7 @@ const LABS: {
     to: '/student/bloch',
     kicker: 'Lab 01',
     title: 'Bloch Sphere Lab',
-    text: 'Apply single-qubit gates and watch the state vector on a 3D Bloch sphere. The arrow appears at the input state as soon as it is connected and moves to the result when the gate output is wired.',
+    text: 'Apply single-qubit gates — alone or chained — and watch the state vector on a 3D Bloch sphere. The arrow appears at the input state as soon as it is connected and moves to the result when the gate output is wired.',
     tags: ['X gate', 'H gate', 'Z gate'],
     experiments: ['bloch-x', 'bloch-h', 'bloch-z'],
     art: (
@@ -53,9 +53,9 @@ const LABS: {
     to: '/student/measurement',
     kicker: 'Lab 02',
     title: 'Measurement Lab',
-    text: 'Measure the H and CNOT gates over many shots and compare the measured counts with the theoretical probabilities on a bar graph.',
-    tags: ['H gate', 'CNOT gate'],
-    experiments: ['measure-h', 'measure-cnot'],
+    text: 'Measure the H, Z and CNOT gates over many shots — including H → CNOT entanglement — and compare the sampled counts with the ideal probabilities.',
+    tags: ['H gate', 'Z gate', 'CNOT gate'],
+    experiments: ['measure-h', 'measure-z', 'measure-cnot'],
     art: (
       <svg viewBox="0 0 120 120">
         <line x1="14" y1="100" x2="108" y2="100" className="la-axis" />
@@ -68,9 +68,28 @@ const LABS: {
   },
 ]
 
+/** Whether the student still needs to link a teacher (null while unknown). */
+function useNeedsTeacher() {
+  const { session } = useAuth()
+  const [needs, setNeeds] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!session) return
+    let alive = true
+    authProvider
+      .getProfile()
+      .then((p) => alive && setNeeds(!p.teacher))
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [session])
+  return needs
+}
+
 export default function StudentDashboard() {
   const { session } = useAuth()
   const summary = useOwnSummary()
+  const needsTeacher = useNeedsTeacher()
   const first = session?.displayName.split(' ')[0] ?? 'there'
   const done = new Set(summary?.completedIds ?? [])
   return (
@@ -93,6 +112,17 @@ export default function StudentDashboard() {
           </div>
         )}
       </section>
+
+      {needsTeacher && (
+        <div className="link-nudge" role="note">
+          <span>
+            <b>Link your teacher</b> — enter the reference ID your teacher gave you so they can follow your progress.
+          </span>
+          <Link to="/student/profile" className="btn">
+            Add reference ID
+          </Link>
+        </div>
+      )}
 
       <div className="lab-list">
         {LABS.map((lab) => {

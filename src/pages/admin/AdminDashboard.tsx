@@ -2,23 +2,8 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ACTIVITY_THRESHOLDS, EXPERIMENTS, type ActivityStatus } from '../../analytics/types'
 import { fmtDateTime, fmtDuration, fmtRelative } from '../../app/format'
+import { StatusChip } from '../shared/activity'
 import { loadRoster, useLiveData } from './useAdminData'
-
-export const STATUS_LABEL: Record<ActivityStatus, string> = {
-  active: 'Active',
-  recent: 'Recent',
-  inactive: 'Inactive',
-  never: 'No activity',
-}
-
-export function StatusChip({ status }: { status: ActivityStatus }) {
-  return (
-    <span className={`status-chip ${status}`}>
-      <i aria-hidden />
-      {STATUS_LABEL[status]}
-    </span>
-  )
-}
 
 const minutes = (ms: number) => Math.round(ms / 60000)
 
@@ -136,6 +121,7 @@ export default function AdminDashboard() {
                 <tr>
                   <th scope="col">Student</th>
                   <th scope="col">ID</th>
+                  <th scope="col">Teacher</th>
                   <th scope="col">Status</th>
                   <th scope="col">Last Active</th>
                   <th scope="col">Sessions</th>
@@ -145,7 +131,7 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ profile, summary }) => (
+                {rows.map(({ profile, teacher, summary }) => (
                   <tr
                     key={profile.id}
                     tabIndex={0}
@@ -159,6 +145,7 @@ export default function AdminDashboard() {
                     <td data-label="ID" className="mono">
                       {profile.id}
                     </td>
+                    <td data-label="Teacher">{teacher ? teacher.name : <span className="muted">Not linked</span>}</td>
                     <td data-label="Status">
                       <StatusChip status={summary.status} />
                     </td>

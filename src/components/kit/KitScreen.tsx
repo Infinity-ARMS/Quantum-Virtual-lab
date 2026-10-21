@@ -1,30 +1,43 @@
+import { lazy, Suspense } from 'react'
 import { BrandMark } from '../../app/BrandMark'
 import type { GateName } from '../../quantum/gates'
-import { BlochSphere } from '../BlochSphere'
 import { ProbabilityGraph } from '../ProbabilityGraph'
 
+// three.js only loads when a Bloch sphere is actually on screen (the Measurement Lab opens on the graph)
+const BlochSphere = lazy(() => import('../BlochSphere').then((m) => ({ default: m.BlochSphere })))
+
 type Vec3 = [number, number, number]
-type Bit = 0 | 1
 
 export type ScreenMode = 'bloch' | 'graph'
 export type GraphView = 'measured' | 'ideal'
 
 export interface SingleScreen {
-  gate: GateName
+  /** The gates the state passes through, e.g. "H → Z". */
+  circuit: string
+  /** The last gate of the chain: its OUT goes to the output pin. */
+  head: GateName
   inputKet: string
-  /** State on screen: the input state, or the gate output once it is shown. */
+  /** State on screen: the input state, or the circuit output once it is shown. */
   shownKet: string
   shownVec: Vec3
   outputKet: string | null
   revealed: boolean
 }
 
+export interface CnotLine {
+  /** State reaching this CNOT input (after any gates before it), or null while unplugged. */
+  inKet: string | null
+  /** This qubit after the CNOT once its output pin is wired: a named state, or "entangled". */
+  outKet: string | null
+  /** Bloch vector on screen; shorter than 1 when the qubit is entangled with the other one. */
+  vec: Vec3 | null
+}
+
 export interface CnotScreen {
-  q0: Bit | null
-  q1: Bit | null
-  out: [Bit, Bit] | null
-  revealed: [boolean, boolean]
-  vec: [Vec3 | null, Vec3 | null]
+  lines: [CnotLine, CnotLine]
+  /** The two-qubit output state, e.g. "0.707|00⟩ + 0.707|11⟩", once both outputs are wired. */
+  outState: string | null
+  entangled: boolean
 }
 
 export interface ScreenProps {
@@ -40,12 +53,12 @@ export interface ScreenProps {
   graphBlocked: string | null
   graph: { labels: readonly string[]; probs: number[]; accent: 'blue' | 'purple' } | null
   counts: { counts: number[]; total: number; last: { n: number; outcome: number } | null } | null
+  /** Shots per RUN press, shown next to the counts. */
+  runShots: number
   view: GraphView
   onView: (v: GraphView) => void
   snapKey: number
 }
-
-const ket = (b: Bit | null) => (b === null ? '—' : `|${b}⟩`)
 
 /** The 2.8″ TFT: boot screen, then Bloch Sphere mode or Probability Graph mode. */
 export function KitScreen(p: ScreenProps) {
@@ -78,31 +91,45 @@ export function KitScreen(p: ScreenProps) {
   )
 }
 
+function Sphere(props: { vector: Vec3 | null; snapKey: number; compact?: boolean }) {
+  return (
+    <Suspense fallback={<div className="tft-sphere-loading" aria-hidden />}>
+      <BlochSphere {...props} resetViewKey={0} />
+    </Suspense>
+  )
+}
+
 function BlochView({ single, cnot, snapKey }: ScreenProps) {
   if (cnot) {
     return (
       <div className="tft-cnot">
         {([0, 1] as const).map((line) => {
-          const bit = line === 0 ? cnot.q0 : cnot.q1
+          const l = cnot.lines[line]
           return (
             <div key={line} className="tft-qubit">
               <span className="tft-qubit-name">{line === 0 ? 'Q0 · Control' : 'Q1 · Target'}</span>
               <div className="tft-sphere">
-                <BlochSphere compact vector={cnot.vec[line]} snapKey={snapKey} resetViewKey={0} />
+                <Sphere compact vector={l.vec} snapKey={snapKey} />
               </div>
               <span className="tft-qline">
-                IN <b>{ket(bit)}</b> → OUT <b>{cnot.out && cnot.revealed[line] ? ket(cnot.out[line]) : '—'}</b>
+                IN <b>{l.inKet ?? '—'}</b> → OUT <b className={l.outKet === 'entangled' ? 'ent' : ''}>{l.outKet ?? '—'}</b>
               </span>
             </div>
           )
         })}
+        {cnot.outState && (
+          <p className="tft-cnot-state">
+            OUT <b>{cnot.outState}</b>
+            {cnot.entangled && <span> · entangled — neither qubit has a state of its own</span>}
+          </p>
+        )}
       </div>
     )
   }
   return (
     <div className="tft-bloch">
       <div className="tft-sphere">
-        <BlochSphere vector={single ? single.shownVec : null} snapKey={snapKey} resetViewKey={0} />
+        <Sphere vector={single ? single.shownVec : null} snapKey={snapKey} />
         {!single && <div className="tft-empty">Connect a gate input</div>}
       </div>
       <dl className="tft-info">
@@ -111,8 +138,8 @@ function BlochView({ single, cnot, snapKey }: ScreenProps) {
           <dd>{single ? single.shownKet : '—'}</dd>
         </div>
         <div>
-          <dt>Gate</dt>
-          <dd>{single ? `${single.gate} gate` : '—'}</dd>
+          <dt>{single && single.circuit.includes('→') ? 'Gates' : 'Gate'}</dt>
+          <dd>{single ? single.circuit : '—'}</dd>
         </div>
         <div>
           <dt>Input</dt>
@@ -121,7 +148,7 @@ function BlochView({ single, cnot, snapKey }: ScreenProps) {
         <div>
           <dt>Output</dt>
           <dd className={single && !single.revealed ? 'wait' : ''}>
-            {single ? (single.revealed && single.outputKet ? single.outputKet : `connect ${single.gate} OUT`) : '—'}
+            {single ? (single.revealed && single.outputKet ? single.outputKet : `connect ${single.head} OUT`) : '—'}
           </dd>
         </div>
       </dl>
@@ -129,7 +156,7 @@ function BlochView({ single, cnot, snapKey }: ScreenProps) {
   )
 }
 
-function GraphViewPane({ graph, graphBlocked, counts, view, onView }: ScreenProps) {
+function GraphViewPane({ graph, graphBlocked, counts, runShots, view, onView }: ScreenProps) {
   if (!graph) return <div className="tft-graph-empty">{graphBlocked}</div>
   const total = counts?.total ?? 0
   const measured = graph.labels.map((_, i) => (total ? (counts!.counts[i] ?? 0) / total : 0))
@@ -152,26 +179,27 @@ function GraphViewPane({ graph, graphBlocked, counts, view, onView }: ScreenProp
           <>
             <div className="tft-total">
               <span>Total shots</span>
-              <b>{total}</b>
+              <b>{total.toLocaleString()}</b>
             </div>
             <table className="tft-table">
               <thead>
                 <tr>
                   <th scope="col">State</th>
-                  <th scope="col">Count</th>
-                  <th scope="col">%</th>
+                  <th scope="col">Counts</th>
+                  <th scope="col">Measured</th>
                 </tr>
               </thead>
               <tbody>
                 {graph.labels.map((l, i) => (
                   <tr key={l} className={counts?.last?.outcome === i ? 'last' : ''}>
                     <th scope="row">{l}</th>
-                    <td>{counts?.counts[i] ?? 0}</td>
-                    <td>{(measured[i] * 100).toFixed(1)}</td>
+                    <td>{(counts?.counts[i] ?? 0).toLocaleString()}</td>
+                    <td>{(measured[i] * 100).toFixed(1)}%</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {total === 0 && <p className="tft-note">SHOT measures once · RUN takes {runShots.toLocaleString()} shots</p>}
           </>
         ) : (
           <>

@@ -2,12 +2,12 @@ import { api, ApiError } from '../api/client'
 import { AuthError, type AuthProvider, type AuthSession, type ProfileUpdate, type StudentProfile } from './types'
 
 interface ServerUser extends StudentProfile {
-  role: 'user' | 'admin'
+  role: 'user' | 'teacher' | 'admin'
 }
 
 const toSession = (u: ServerUser): AuthSession => ({
   userId: u.id,
-  role: u.role === 'admin' ? 'admin' : 'student',
+  role: u.role === 'admin' ? 'admin' : u.role === 'teacher' ? 'teacher' : 'student',
   displayName: u.name,
 })
 
@@ -47,5 +47,14 @@ export const apiAuthProvider: AuthProvider = {
 
   async updateProfile(update: ProfileUpdate) {
     return (await api<{ profile: StudentProfile }>('/profile', { method: 'PATCH', body: update })).profile
+  },
+
+  async linkTeacher(code) {
+    try {
+      return (await api<{ teacher: { name: string } }>('/me/teacher', { method: 'POST', body: { code } })).teacher
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 400 || err.status === 429)) throw new AuthError(err.message)
+      throw err
+    }
   },
 }

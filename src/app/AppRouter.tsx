@@ -6,13 +6,15 @@ import StudentDashboard from '../pages/student/StudentDashboard'
 import { AppShell } from './AppShell'
 import { RequireRole } from './guards'
 
-// Three.js and the lab only load when an experiment opens; admin pages load for admins only
+// Three.js and the lab only load when an experiment opens; teacher and admin pages load for those roles only
 const BlochLabPage = lazy(() => import('../pages/student/BlochLabPage'))
 const MeasurementLabPage = lazy(() => import('../pages/student/MeasurementLabPage'))
 const ProfilePage = lazy(() => import('../pages/student/ProfilePage'))
 const AdminDashboard = lazy(() => import('../pages/admin/AdminDashboard'))
 const AdminStudentDetail = lazy(() => import('../pages/admin/AdminStudentDetail'))
 const AdminUsers = lazy(() => import('../pages/admin/AdminUsers'))
+const TeacherDashboard = lazy(() => import('../pages/teacher/TeacherDashboard'))
+const TeacherStudentDetail = lazy(() => import('../pages/teacher/TeacherStudentDetail'))
 
 function NotFound() {
   return (
@@ -57,6 +59,19 @@ export function AppRouter() {
           <Route path="measurement" element={<MeasurementLabPage />} />
           <Route path="measurement/:kind" element={<Navigate to="/student/measurement" replace />} />
           <Route path="*" element={<Navigate to="/student" replace />} />
+        </Route>
+
+        <Route
+          path="/teacher"
+          element={
+            <RequireRole role="teacher">
+              <AppShell role="teacher" />
+            </RequireRole>
+          }
+        >
+          <Route index element={<TeacherDashboard />} />
+          <Route path="students/:id" element={<TeacherStudentDetail />} />
+          <Route path="*" element={<Navigate to="/teacher" replace />} />
         </Route>
 
         <Route

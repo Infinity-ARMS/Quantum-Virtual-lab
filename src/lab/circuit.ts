@@ -89,13 +89,66 @@ export function inputBit(conns: Connection[], input: string): 0 | 1 | null {
   return src && src.kind === 'source' ? src.value! : null
 }
 
-/** Which experiment a gate input belongs to: X, H, Z, or CNOT (both CNOT inputs are one experiment). */
-const experimentOf = (input: string) => (input.startsWith('d.cnot') ? 'CNOT' : input.split('.')[1])
+export type Experiment = GateName | 'CNOT'
 
-/** The single-qubit gate whose IN holds a cable (at most one: one experiment at a time). */
+/** The gate a gate socket belongs to (X, H, Z or CNOT); null for initial states and outputs. */
+const gateOf = (socket: string): Experiment | null =>
+  socket.startsWith('d.cnot') ? 'CNOT' : socket.startsWith('s.') && SOCKETS[socket]?.kind !== 'source' ? (socket.split('.')[1] as GateName) : null
+
+const isGateInput = (socket: string) => SOCKETS[socket]?.kind === 'in'
+
+/** The gate a gate's OUT feeds, or null when its output leaves the circuit (or goes nowhere). */
+function feeds(conns: Connection[], gate: Experiment): Experiment | null {
+  if (gate === 'CNOT') return null // CNOT outputs only go to their output pins
+  const c = conns.find((x) => x.from === `s.${gate}.out` && isGateInput(x.to))
+  return c ? gateOf(c.to) : null
+}
+
+/** The last gate of the chain `gate` belongs to — the experiment it is part of (H → Z is the Z experiment). */
+export function headOf(conns: Connection[], gate: Experiment): Experiment {
+  let g = gate
+  for (let i = 0; i < 8; i++) {
+    const n = feeds(conns, g)
+    if (!n) return g
+    g = n
+  }
+  return g
+}
+
+/** The gates upstream of `gate` (what feeds its input, and what feeds that, …). */
+function upstream(conns: Connection[], gate: GateName): GateName[] {
+  const out: GateName[] = []
+  let g: GateName | null = gate
+  for (let i = 0; i < 8 && g; i++) {
+    const c = conns.find((x) => x.to === `s.${g}.in`)
+    const prev = c && SOCKETS[c.from].kind === 'out' && c.from.startsWith('s.') ? (c.from.split('.')[1] as GateName) : null
+    if (prev) out.push(prev)
+    g = prev
+  }
+  return out
+}
+
+/** Every experiment wired on the kit: the end gate of each chain that has a cable in an input. */
+function experiments(conns: Connection[]): Set<Experiment> {
+  return new Set(conns.filter((c) => isGateInput(c.to)).map((c) => headOf(conns, gateOf(c.to)!)))
+}
+
+/** The experiment on the kit (one at a time): the gate at the end of the wired chain, or CNOT. */
+export function activeExperiment(conns: Connection[]): Experiment | null {
+  return [...experiments(conns)][0] ?? null
+}
+
+/** The single-qubit gate whose output ends the wired chain, or null (nothing wired, or the CNOT experiment). */
 export function activeSingleGate(conns: Connection[]): GateName | null {
-  const c = conns.find((x) => SOCKETS[x.to]?.kind === 'in' && x.to.startsWith('s.'))
-  return c ? (c.to.split('.')[1] as GateName) : null
+  const e = activeExperiment(conns)
+  return e && e !== 'CNOT' ? e : null
+}
+
+/** The first gate of the chain ending at `gate` whose IN is still empty (where the initial state goes), or null. */
+export function missingInput(conns: Connection[], gate: GateName): GateName | null {
+  const chain = [gate, ...upstream(conns, gate)]
+  const root = chain[chain.length - 1]
+  return conns.some((c) => c.to === `s.${root}.in`) ? null : root
 }
 
 /** Validate and add a cable between two sockets (in either click order). */
@@ -106,37 +159,47 @@ export function tryConnect(conns: Connection[], a: string, b: string): ConnectRe
   if (isProducer(a) === isProducer(b))
     return { ok: false, msg: isProducer(a) ? 'Connect an output to an input' : 'Connect an input to an output' }
   const [from, to] = isProducer(a) ? [a, b] : [b, a]
-  const toViz = SOCKETS[to].section === 'viz'
-  if (!toViz && SOCKETS[from].section !== SOCKETS[to].section)
-    return { ok: false, msg: 'Single- and double-qubit circuits are separate' }
-  if (from.startsWith('s.') && from.split('.')[1] === to.split('.')[1] && to.startsWith('s.'))
-    return { ok: false, msg: 'A gate cannot feed itself' }
+  const F = SOCKETS[from]
+  const T = SOCKETS[to]
+  const toViz = T.section === 'viz'
   if (conns.some((c) => c.from === from && c.to === to)) return { ok: false, msg: 'Already connected' }
-  if (to.startsWith('d.cnot') && SOCKETS[from].kind !== 'source') return { ok: false, msg: 'CNOT inputs take qubit sources' }
-  // hardware kit rules: an output only takes a gate OUT, gates are not chained, and each CNOT line has its own states
-  if (toViz && SOCKETS[from].kind === 'source')
-    return { ok: false, msg: 'Connect the state to the gate IN first — outputs take a gate OUT' }
+
+  // outputs take a gate OUT; each gate OUT has its own output banana pin
+  if (toViz && F.kind === 'source') return { ok: false, msg: 'Connect the state to the gate IN first — outputs take a gate OUT' }
   if (to.startsWith('pin.') && PIN_FOR[from] !== to)
-    return { ok: false, msg: `${SOCKETS[from].label} connects to the ${SOCKETS[PIN_FOR[from]]?.label ?? 'matching output pin'}` }
-  if (SOCKETS[from].kind === 'out' && SOCKETS[to].kind === 'in')
-    return { ok: false, msg: 'Gates are not chained — wire the gate OUT to its output banana pin' }
-  if (to === 'd.cnot.cin' && !from.startsWith('d.q0.')) return { ok: false, msg: 'Q0 states go to CNOT Q0 IN' }
-  if (to === 'd.cnot.tin' && !from.startsWith('d.q1.')) return { ok: false, msg: 'Q1 states go to CNOT Q1 IN' }
-  // one experiment at a time, as on the kit: another gate's input must be unplugged first
-  if (SOCKETS[to].kind === 'in') {
-    const other = conns.find((c) => SOCKETS[c.to].kind === 'in' && experimentOf(c.to) !== experimentOf(to))
-    if (other) return { ok: false, msg: `One experiment at a time — unplug the ${SOCKETS[other.to].label} cable first` }
+    return { ok: false, msg: `${F.label} connects to the ${SOCKETS[PIN_FOR[from]]?.label ?? 'matching output pin'}` }
+  if (F.section === 'double' && F.kind === 'out' && !toViz) return { ok: false, msg: 'CNOT outputs go to their output pins' }
+
+  // each CNOT input takes its own line's initial state, or the OUT of a gate (e.g. H → CNOT)
+  if (to === 'd.cnot.cin' && F.kind === 'source' && !from.startsWith('d.q0.'))
+    return { ok: false, msg: F.section === 'double' ? 'Q0 states go to CNOT Q0 IN' : 'CNOT Q0 IN takes a Q0 state or a gate OUT' }
+  if (to === 'd.cnot.tin' && F.kind === 'source' && !from.startsWith('d.q1.'))
+    return { ok: false, msg: F.section === 'double' ? 'Q1 states go to CNOT Q1 IN' : 'CNOT Q1 IN takes a Q1 state or a gate OUT' }
+
+  // gate chaining: a gate OUT may feed another gate's IN, but never itself or anything upstream of it
+  if (F.kind === 'out' && T.kind === 'in' && to.startsWith('s.')) {
+    const fg = from.split('.')[1] as GateName
+    const tg = to.split('.')[1] as GateName
+    if (fg === tg) return { ok: false, msg: 'A gate cannot feed itself' }
+    if (upstream(conns, fg).includes(tg)) return { ok: false, msg: 'That would loop the circuit back on itself' }
   }
 
   // a consumer holds exactly one plug — replace any existing cable
   let next = conns.filter((c) => c.to !== to)
   let note = ''
+  // a qubit cannot be copied: a gate OUT goes to one place, so moving it unplugs the old cable
+  if (F.kind === 'out') {
+    const old = next.find((c) => c.from === from)
+    if (old) {
+      next = next.filter((c) => c !== old)
+      note = ` (${F.label} unplugged from ${SOCKETS[old.to].label} — a qubit can only go one way)`
+    }
+  }
+
   if (toViz && !to.startsWith('pin.')) {
-    const fromSection = SOCKETS[from].section
-    if (fromSection === 'double' && !from.startsWith('d.cnot'))
-      return { ok: false, msg: 'Route Q0/Q1 through the CNOT gate first' }
-    if (fromSection === 'single' && to.endsWith('.q1'))
-      return { ok: false, msg: 'The single-qubit experiment uses the Q0 input' }
+    const fromSection = F.section
+    if (fromSection === 'double' && !from.startsWith('d.cnot')) return { ok: false, msg: 'Route Q0/Q1 through the CNOT gate first' }
+    if (fromSection === 'single' && to.endsWith('.q1')) return { ok: false, msg: 'The single-qubit experiment uses the Q0 input' }
     // Q0/Q1 of one visualization must come from the same experiment
     const sibling = to.endsWith('.q0') ? to.replace(/q0$/, 'q1') : to.replace(/q1$/, 'q0')
     const sib = next.find((c) => c.to === sibling)
@@ -147,7 +210,23 @@ export function tryConnect(conns: Connection[], a: string, b: string): ConnectRe
     }
   }
   next = [...next, makeConn(from, to)]
-  return { ok: true, conns: next, msg: `Connected ${SOCKETS[from].label} → ${SOCKETS[to].label}${note}` }
+
+  // one experiment at a time, as on the kit: another experiment's input must be unplugged first
+  if (experiments(next).size > 1) {
+    const g = gateOf(T.kind === 'in' ? to : from)
+    const mine = g && headOf(next, g)
+    const other = conns.find((c) => isGateInput(c.to) && headOf(next, gateOf(c.to)!) !== mine)
+    // building H → CNOT in the other order: the H OUT cable has to go in before the H IN cable
+    const hint =
+      T.kind === 'in' && mine !== 'CNOT' && other && headOf(next, gateOf(other.to)!) === 'CNOT'
+        ? ` (to use ${g} with the CNOT, wire ${g} OUT to a CNOT input first)`
+        : ''
+    return {
+      ok: false,
+      msg: `One experiment at a time — unplug the ${other ? SOCKETS[other.to].label : 'other'} cable first${hint}`,
+    }
+  }
+  return { ok: true, conns: next, msg: `Connected ${F.label} → ${T.label}${note}` }
 }
 
 export interface SingleSignal {
@@ -161,12 +240,10 @@ export interface SingleSignal {
  * As on the hardware kit, this alone is enough to show the input state on the Bloch sphere.
  */
 export function gateInput(conns: Connection[], gate: GateName): 0 | 1 | null {
-  const c = conns.find((x) => x.to === `s.${gate}.in`)
-  const src = c && SOCKETS[c.from]
-  return src && src.kind === 'source' ? src.value! : null
+  return inputBit(conns, `s.${gate}.in`)
 }
 
-/** Follow cables upstream from a producer socket and simulate the circuit. */
+/** Follow cables upstream from a producer socket and simulate the circuit: each gate acts on the state it receives. */
 export function resolveSingle(conns: Connection[], producer: string, depth = 0): SingleSignal | null {
   const meta = SOCKETS[producer]
   if (!meta || depth > 8) return null
@@ -180,22 +257,28 @@ export function resolveSingle(conns: Connection[], producer: string, depth = 0):
   return { state: applyGate(gate, input.state), source: input.source, gates: [...input.gates, gate] }
 }
 
+/** The single-qubit state arriving at a CNOT input: an initial state, or the output of a gate chain. */
+export function lineSignal(conns: Connection[], input: 'd.cnot.cin' | 'd.cnot.tin'): SingleSignal | null {
+  const c = conns.find((x) => x.to === input)
+  return c ? resolveSingle(conns, c.from) : null
+}
+
 export interface DoubleSignal {
+  /** What reaches CNOT Q0 IN (control) and CNOT Q1 IN (target). */
+  lines: [SingleSignal, SingleSignal]
+  /** |q0⟩ ⊗ |q1⟩ */
   input: TwoQubit
-  inputBits: [0 | 1, 0 | 1]
   /** CNOT output, ordered |q0 q1⟩ = |control target⟩ */
   state: TwoQubit
 }
 
-/** Simulate the two-qubit circuit once both CNOT inputs have a qubit source. */
+/** Simulate the two-qubit circuit once both CNOT inputs receive a state — whatever gates prepared them. */
 export function resolveDouble(conns: Connection[]): DoubleSignal | null {
-  const ctrl = conns.find((c) => c.to === 'd.cnot.cin')
-  const tgt = conns.find((c) => c.to === 'd.cnot.tin')
-  if (!ctrl || !tgt) return null
-  const cb = SOCKETS[ctrl.from].value!
-  const tb = SOCKETS[tgt.from].value!
-  const input = kron(basis(cb), basis(tb))
-  return { input, inputBits: [cb, tb], state: applyCNOT(input) }
+  const q0 = lineSignal(conns, 'd.cnot.cin')
+  const q1 = lineSignal(conns, 'd.cnot.tin')
+  if (!q0 || !q1) return null
+  const input = kron(q0.state, q1.state)
+  return { lines: [q0, q1], input, state: applyCNOT(input) }
 }
 
 /** What a visualization input receives: a whole single-qubit state, or one line of the CNOT register. */
@@ -219,5 +302,5 @@ export function isLive(conns: Connection[], producer: string): boolean {
   const meta = SOCKETS[producer]
   if (meta.kind === 'source') return true
   if (meta.section === 'single') return resolveSingle(conns, producer) !== null
-  return conns.some((c) => c.to === 'd.cnot.cin') && conns.some((c) => c.to === 'd.cnot.tin')
+  return resolveDouble(conns) !== null
 }

@@ -38,7 +38,7 @@ export class AnalyticsService {
   }
 
   /** Called by the auth layer whenever the signed-in user changes. Non-students are not tracked. */
-  identify(userId: string | null, role: 'student' | 'admin' | null) {
+  identify(userId: string | null, role: 'student' | 'teacher' | 'admin' | null) {
     this.userId = role === 'student' ? userId : null
   }
 
@@ -112,8 +112,8 @@ export class AnalyticsService {
     this.emit('page_view', { detail: { path } })
   }
 
-  trackGateSelected(experiment: ExperimentId) {
-    this.emit('gate_selected', { experiment })
+  trackGateSelected(experiment: ExperimentId, detail?: Record<string, string | number>) {
+    this.emit('gate_selected', { experiment, ...(detail ? { detail } : {}) })
   }
 
   startExperiment(experiment: ExperimentId) {
@@ -126,12 +126,18 @@ export class AnalyticsService {
     this.emit('experiment_start', { experiment })
   }
 
-  completeExperiment(experiment: ExperimentId) {
-    if (!this.runId) return
+  /**
+   * Mark the current run complete — once per run, however often it is called (re-renders, repeated results).
+   * Returns the completion time when this call completed it, otherwise null.
+   */
+  completeExperiment(experiment: ExperimentId, detail?: Record<string, string | number>): number | null {
+    if (!this.runId) return null
     const r = this.store.getRun(this.runId)
-    if (!r || r.completedAt) return
-    this.store.putRun({ ...r, completedAt: Date.now(), lastSeenAt: Date.now() })
-    this.emit('experiment_complete', { experiment })
+    if (!r || r.completedAt || r.experiment !== experiment) return null
+    const at = Date.now()
+    this.store.putRun({ ...r, completedAt: at, lastSeenAt: at })
+    this.emit('experiment_complete', { experiment, ...(detail ? { detail } : {}) })
+    return at
   }
 
   endExperiment() {
@@ -158,7 +164,7 @@ export class AnalyticsService {
     this.emit('example_loaded', { experiment })
   }
 
-  /** Upload anything still queued (e.g. before signing out). */
+  /** Upload anything still queued (e.g. before signing out); resolves false if the server could not be reached. */
   flush() {
     return this.store.flush()
   }

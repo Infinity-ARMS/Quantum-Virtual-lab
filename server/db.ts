@@ -145,23 +145,93 @@ export const MIGRATIONS: Migration[] = [
       );
       CREATE INDEX role_changes_user ON role_changes(user_id, at);`,
   },
+  {
+    // teachers: a third role, each student's teacher, and the public reference IDs students link with.
+    // SQLite cannot change a CHECK constraint in place, so it rebuilds the users table (rows copied unchanged;
+    // runMigrations keeps foreign keys off meanwhile so no dependent analytics rows are touched).
+    id: '005_teachers',
+    sqlite: `
+      CREATE TABLE users_new (
+        id                TEXT PRIMARY KEY,
+        username          TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        password_hash     TEXT NOT NULL,
+        name              TEXT NOT NULL,
+        email             TEXT NOT NULL DEFAULT '',
+        course            TEXT NOT NULL DEFAULT '',
+        institution       TEXT NOT NULL DEFAULT '',
+        status            TEXT NOT NULL DEFAULT 'enrolled' CHECK (status IN ('enrolled', 'suspended')),
+        created_at        INTEGER NOT NULL,
+        role              TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'teacher', 'admin')),
+        last_login_at     INTEGER,
+        teacher_id        TEXT REFERENCES users(id) ON DELETE SET NULL,
+        teacher_linked_at INTEGER,
+        feed_seen_at      INTEGER
+      );
+      INSERT INTO users_new (id, username, password_hash, name, email, course, institution, status, created_at, role, last_login_at)
+        SELECT id, username, password_hash, name, email, course, institution, status, created_at, role, last_login_at FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+      CREATE UNIQUE INDEX users_email_ci ON users (lower(email)) WHERE email <> '';
+      CREATE INDEX users_teacher ON users (teacher_id);
+      CREATE TABLE teacher_codes (
+        code       TEXT PRIMARY KEY,
+        teacher_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        status     TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'revoked')),
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX teacher_codes_current ON teacher_codes (teacher_id) WHERE status <> 'revoked';`,
+    postgres: `
+      DO $$
+      DECLARE c record;
+      BEGIN
+        FOR c IN SELECT conname FROM pg_constraint
+                 WHERE conrelid = 'users'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%role%'
+        LOOP
+          EXECUTE format('ALTER TABLE users DROP CONSTRAINT %I', c.conname);
+        END LOOP;
+      END $$;
+      ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'teacher', 'admin'));
+      ALTER TABLE users ADD COLUMN teacher_id TEXT REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE users ADD COLUMN teacher_linked_at BIGINT;
+      ALTER TABLE users ADD COLUMN feed_seen_at BIGINT;
+      CREATE INDEX users_teacher ON users (teacher_id);
+      CREATE TABLE teacher_codes (
+        code       TEXT PRIMARY KEY,
+        teacher_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        status     TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'revoked')),
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
+      );
+      CREATE UNIQUE INDEX teacher_codes_current ON teacher_codes (teacher_id) WHERE status <> 'revoked';`,
+  },
 ]
 
 export async function runMigrations(db: DB, migrations: Migration[] = MIGRATIONS): Promise<string[]> {
   await db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY, applied_at BIGINT NOT NULL)`)
-  return db.transaction(async (tx) => {
-    // serverless cold starts may migrate concurrently: serialise them on Postgres
-    if (tx.dialect === 'postgres') await tx.exec('SELECT pg_advisory_xact_lock(727274)')
-    const done = new Set((await tx.all<{ id: string }>('SELECT id FROM schema_migrations')).map((r) => r.id))
-    const applied: string[] = []
-    for (const m of migrations) {
-      if (done.has(m.id)) continue
-      await tx.exec(tx.dialect === 'postgres' ? m.postgres : m.sqlite)
-      await tx.run('INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)', [m.id, Date.now()])
-      applied.push(m.id)
-    }
-    return applied
-  })
+  // SQLite table rebuilds (see 005) need foreign-key actions off, which can only be switched outside a
+  // transaction; integrity is checked before committing instead (SQLite's documented ALTER TABLE procedure)
+  const sqlite = db.dialect === 'sqlite'
+  if (sqlite) await db.exec('PRAGMA foreign_keys = OFF')
+  try {
+    return await db.transaction(async (tx) => {
+      // serverless cold starts may migrate concurrently: serialise them on Postgres
+      if (tx.dialect === 'postgres') await tx.exec('SELECT pg_advisory_xact_lock(727274)')
+      const done = new Set((await tx.all<{ id: string }>('SELECT id FROM schema_migrations')).map((r) => r.id))
+      const applied: string[] = []
+      for (const m of migrations) {
+        if (done.has(m.id)) continue
+        await tx.exec(tx.dialect === 'postgres' ? m.postgres : m.sqlite)
+        await tx.run('INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)', [m.id, Date.now()])
+        applied.push(m.id)
+      }
+      if (sqlite && applied.length && (await tx.all('PRAGMA foreign_key_check')).length)
+        throw new Error('Migration left rows with broken foreign keys; rolled back')
+      return applied
+    })
+  } finally {
+    if (sqlite) await db.exec('PRAGMA foreign_keys = ON')
+  }
 }
 
 // ---------------------------------------------------------------- SQLite (local development, tests)

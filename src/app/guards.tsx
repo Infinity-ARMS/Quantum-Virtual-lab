@@ -1,7 +1,10 @@
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import type { Role } from '../auth/types'
+import { HOME_FOR, type Role } from '../auth/types'
 import { LoadingScreen } from './ErrorBoundary'
+
+const AREA: Record<Role, string> = { student: 'students', teacher: 'teachers', admin: 'administrators' }
+const AS: Record<Role, string> = { student: 'a student', teacher: 'a teacher', admin: 'an administrator' }
 
 /**
  * UI-level route guard: it only decides what to render. Authorization is enforced by the server
@@ -13,17 +16,15 @@ export function RequireRole({ role, children }: { role: Role; children: React.Re
   if (!ready) return <LoadingScreen label="Checking your session…" />
   if (!session) return <Navigate to="/login" replace state={{ from: location.pathname }} />
   if (session.role !== role) {
-    const home = session.role === 'admin' ? '/admin' : '/student'
     return (
       <div className="state-screen" role="alert">
         <div className="state-card">
           <h2>Access restricted</h2>
           <p>
-            This area is for {role === 'admin' ? 'administrators' : 'students'}. You are signed in as{' '}
-            {session.role === 'admin' ? 'an administrator' : 'a student'}.
+            This area is for {AREA[role]}. You are signed in as {AS[session.role]}.
           </p>
           <div className="state-actions">
-            <Link className="btn btn-primary" to={home}>
+            <Link className="btn btn-primary" to={HOME_FOR[session.role]}>
               Go to my dashboard
             </Link>
           </div>

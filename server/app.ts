@@ -1,10 +1,21 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { randomUUID } from 'node:crypto'
 import { studentDetail, summarize } from '../src/analytics/summary.ts'
-import { EVENT_TYPES, EXPERIMENTS } from '../src/analytics/types.ts'
+import { EVENT_TYPES, EXPERIMENTS, SERVER_ONLY_EVENTS } from '../src/analytics/types.ts'
 import type { AnalyticsEvent, RunRecord, SessionRecord } from '../src/analytics/types.ts'
 import type { DB } from './db.ts'
 import * as repo from './repo.ts'
-import { hashPassword, signToken, verifyAgainstDummy, verifyPassword, verifyToken, type ServerRole } from './security.ts'
+import {
+  hashPassword,
+  normalizeTeacherCode,
+  SERVER_ROLES,
+  signToken,
+  TEACHER_CODE,
+  verifyAgainstDummy,
+  verifyPassword,
+  verifyToken,
+  type ServerRole,
+} from './security.ts'
 
 export interface AppOptions {
   db: DB
@@ -103,6 +114,10 @@ export function createApp(opts: AppOptions) {
   if (!secret || secret.length < 32) throw new Error('AUTH_SECRET must be set to at least 32 characters')
   const ttl = opts.sessionTtlSeconds ?? 8 * 60 * 60
   const throttle = createThrottle()
+  // guessing teacher reference IDs: at most 10 failed attempts per client (or account) per 15 minutes
+  const codeThrottle = createThrottle()
+  const clientIp = (req: Req) =>
+    (opts.trustProxy ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : '') || req.socket?.remoteAddress || 'unknown'
 
   const setSessionCookie = (res: ServerResponse, token: string, maxAge: number) => {
     const parts = [`${COOKIE}=${token}`, 'Path=/', 'HttpOnly', 'SameSite=Strict', `Max-Age=${maxAge}`]
@@ -132,16 +147,43 @@ export function createApp(opts: AppOptions) {
       return h(req, res, body)
     }
 
-  /** 401 when not signed in, 403 for signed-in non-admins; never reads a role from the request. */
-  const requireAdmin =
+  /** 401 when not signed in, 403 when signed in with another role; the role is the account's, never the request's. */
+  const requireRole =
+    (role: ServerRole) =>
     (h: Handler): Handler =>
     async (req, res, body) => {
       const auth = await authenticate(req)
       if (!auth) throw new HttpError(401, 'Authentication required')
-      if (auth.role !== 'admin') throw new HttpError(403, 'Forbidden')
+      if (auth.role !== role) throw new HttpError(403, 'Forbidden')
       req.auth = auth
       return h(req, res, body)
     }
+  const requireAdmin = requireRole('admin')
+  const requireTeacher = requireRole('teacher')
+
+  /**
+   * Resolve a reference ID typed by a student to its teacher. Failed attempts are throttled per `throttleKey`
+   * so codes cannot be guessed; the error says only what the student needs to fix.
+   */
+  async function teacherFromCode(input: string, throttleKey: string): Promise<repo.UserRow> {
+    if (codeThrottle.blocked(throttleKey)) throw new HttpError(429, 'Too many attempts. Try again later.')
+    const code = normalizeTeacherCode(input)
+    const found = TEACHER_CODE.test(code) ? await repo.resolveTeacherCode(db, code) : { ok: false as const, reason: 'invalid' as const }
+    if (found.ok) return found.teacher
+    codeThrottle.fail(throttleKey)
+    throw new HttpError(
+      400,
+      found.reason === 'disabled'
+        ? 'This teacher reference ID is disabled at the moment. Ask your teacher to enable it.'
+        : found.reason === 'revoked'
+          ? 'This teacher reference ID is no longer valid. Ask your teacher for their current one.'
+          : 'No teacher has this reference ID. Check it with your teacher (it looks like QL-TEA-8K42).',
+    )
+  }
+
+  /** Record the link as an activity event, so the teacher is notified that the student joined. */
+  const recordLink = (studentId: string, teacherId: string) =>
+    repo.insertEvent(db, { id: `link-${randomUUID()}`, userId: studentId, type: 'teacher_linked', at: Date.now(), detail: { teacher: teacherId } })
 
   const sessionBody = (u: repo.UserRow) => ({ user: { ...repo.toProfile(u), role: u.role } })
 
@@ -159,8 +201,7 @@ export function createApp(opts: AppOptions) {
     // one identifier field: the college email (or, for older accounts, the username)
     const username = str(b.username ?? b.email, 120) ?? ''
     const password = typeof b.password === 'string' ? b.password : ''
-    const forwarded = opts.trustProxy ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : ''
-    const key = `${forwarded || req.socket?.remoteAddress || 'unknown'}|${username.toLowerCase()}`
+    const key = `${clientIp(req)}|${username.toLowerCase()}`
     if (throttle.blocked(key)) throw new HttpError(429, 'Too many attempts. Try again later.')
     const user = username ? await repo.findUserByLogin(db, username) : undefined
     const ok = user ? verifyPassword(password, user.password_hash) : (verifyAgainstDummy(password), false)
@@ -189,16 +230,19 @@ export function createApp(opts: AppOptions) {
    * Public sign-up, restricted to @sakec.ac.in addresses. Always creates a student (role = 'user'): any role in
    * the request body is ignored. Only an admin can change a role afterwards (PATCH /api/admin/users/:id/role).
    */
-  route('POST', '/api/register', async (_req, res, body) => {
+  route('POST', '/api/register', async (req, res, body) => {
     const b = obj(body)
     const email = (str(b.email, 120) ?? '').toLowerCase()
     const password = typeof b.password === 'string' ? b.password : ''
     const name = str(b.name, 80)
+    const teacherCode = str(b.teacherCode, 40)
     if (!name) throw new HttpError(400, 'Name is required.')
     if (!COLLEGE_EMAIL.test(email)) throw new HttpError(400, 'Use your college email address ending in @sakec.ac.in.')
     if (password.length < 8 || password.length > 200) throw new HttpError(400, 'Password must be at least 8 characters.')
     if ((await repo.findUserByEmail(db, email)) || (await repo.findUserByUsername(db, email)))
       throw new HttpError(409, 'An account with this email already exists. Sign in instead.')
+    // optional: the teacher is resolved from the reference ID here, never taken from the request
+    const teacher = teacherCode ? await teacherFromCode(teacherCode, `register|${clientIp(req)}`) : null
     const id = await repo.nextStudentId(db)
     await repo.insertUser(db, {
       id,
@@ -210,13 +254,42 @@ export function createApp(opts: AppOptions) {
       institution: 'SAKEC',
       role: 'user', // server-controlled; never taken from the request
     })
+    if (teacher) {
+      await repo.linkStudentToTeacher(db, id, teacher.id)
+      await recordLink(id, teacher.id)
+    }
     send(res, 201, { user: repo.toProfile((await repo.findUserById(db, id))!) })
   })
+
+  /** The linked teacher of a student, by name only. */
+  const teacherOf = async (u: repo.UserRow) => {
+    if (u.role !== 'user' || !u.teacher_id) return null
+    const t = await repo.findUserById(db, u.teacher_id)
+    return t && t.role === 'teacher' ? { name: t.name } : null
+  }
 
   route(
     'GET',
     '/api/profile',
-    requireAuth((req, res) => send(res, 200, { profile: repo.toProfile(req.auth!.user) })),
+    requireAuth(async (req, res) => send(res, 200, { profile: { ...repo.toProfile(req.auth!.user), teacher: await teacherOf(req.auth!.user) } })),
+  )
+
+  /** Enrolment for existing students: link (or move) the signed-in student to the teacher who owns the code. */
+  route(
+    'POST',
+    '/api/me/teacher',
+    requireAuth(async (req, res, body) => {
+      const { user } = req.auth!
+      if (user.role !== 'user') throw new HttpError(403, 'Only student accounts link to a teacher.')
+      const code = str(obj(body).code, 40)
+      if (!code) throw new HttpError(400, "Enter your teacher's reference ID.")
+      const teacher = await teacherFromCode(code, `link|${user.id}`)
+      if (user.teacher_id !== teacher.id) {
+        await repo.linkStudentToTeacher(db, user.id, teacher.id)
+        await recordLink(user.id, teacher.id)
+      }
+      send(res, 200, { teacher: { name: teacher.name } })
+    }),
   )
 
   route(
@@ -236,7 +309,8 @@ export function createApp(opts: AppOptions) {
 
   // ---------------------------------------------------------------- analytics ingestion (own records only)
   const experimentIds = new Set<string>(EXPERIMENTS.map((e) => e.id))
-  const eventTypes = new Set<string>(EVENT_TYPES)
+  // the page may report these event types; server-recorded ones (e.g. teacher_linked) cannot be claimed
+  const eventTypes = new Set<string>(EVENT_TYPES.filter((t) => !SERVER_ONLY_EVENTS.includes(t)))
   const clampTime = (v: unknown) => {
     const n = typeof v === 'number' && Number.isFinite(v) ? v : NaN
     const now = Date.now()
@@ -309,6 +383,80 @@ export function createApp(opts: AppOptions) {
     ),
   )
 
+  // ---------------------------------------------------------------- teacher (own students only, server-enforced)
+
+  /** A student the signed-in teacher may see: linked to them. Anyone else is 403, existing or not. */
+  async function ownStudent(req: Req): Promise<repo.UserRow> {
+    const student = await repo.findUserById(db, req.params!.id)
+    if (!student || student.role !== 'user' || student.teacher_id !== req.auth!.userId) throw new HttpError(403, 'Forbidden')
+    return student
+  }
+
+  const codeBody = (c: repo.TeacherCodeRow) => ({ code: c.code, status: c.status, updatedAt: c.updated_at })
+
+  route(
+    'GET',
+    '/api/teacher/overview',
+    requireTeacher(async (req, res) => {
+      const me = req.auth!.user
+      const students = await repo.listStudentsOfTeacher(db, me.id)
+      const snap = await repo.snapshot(
+        db,
+        students.map((s) => s.id),
+      )
+      send(res, 200, {
+        teacher: { id: me.id, name: me.name, email: me.email },
+        code: codeBody(await repo.ensureTeacherCode(db, me.id)),
+        students: students.map((s) => ({ profile: repo.toProfile(s), linkedAt: s.teacher_linked_at, summary: summarize(s.id, snap) })),
+      })
+    }),
+  )
+
+  route(
+    'GET',
+    '/api/teacher/students/:id',
+    requireTeacher(async (req, res) => {
+      const student = await ownStudent(req)
+      send(res, 200, {
+        profile: repo.toProfile(student),
+        linkedAt: student.teacher_linked_at,
+        detail: studentDetail(student.id, await repo.snapshot(db, [student.id])),
+      })
+    }),
+  )
+
+  route(
+    'GET',
+    '/api/teacher/activity',
+    requireTeacher(async (req, res) => {
+      const items = await repo.teacherFeed(db, req.auth!.userId)
+      send(res, 200, { items, seenAt: req.auth!.user.feed_seen_at ?? null })
+    }),
+  )
+
+  route(
+    'POST',
+    '/api/teacher/activity/seen',
+    requireTeacher(async (req, res) => {
+      await repo.setFeedSeen(db, req.auth!.userId, Date.now())
+      send(res, 204)
+    }),
+  )
+
+  const codeAction = (v: unknown) => {
+    if (v !== 'disable' && v !== 'enable' && v !== 'regenerate') throw new HttpError(400, 'Action must be "disable", "enable" or "regenerate".')
+    return v
+  }
+
+  /** The teacher manages their own reference ID: disable / enable it, or revoke it and get a new one. */
+  route(
+    'POST',
+    '/api/teacher/code',
+    requireTeacher(async (req, res, body) =>
+      send(res, 200, { code: codeBody(await repo.updateTeacherCode(db, req.auth!.userId, codeAction(obj(body).action))) }),
+    ),
+  )
+
   // ---------------------------------------------------------------- admin (server-enforced)
   route(
     'GET',
@@ -319,7 +467,14 @@ export function createApp(opts: AppOptions) {
         db,
         students.map((s) => s.id),
       )
-      send(res, 200, { students: students.map((s) => ({ profile: repo.toProfile(s), summary: summarize(s.id, snap) })) })
+      const teachers = await repo.teacherNames(db)
+      send(res, 200, {
+        students: students.map((s) => ({
+          profile: repo.toProfile(s),
+          teacher: s.teacher_id && teachers.has(s.teacher_id) ? { name: teachers.get(s.teacher_id)! } : null,
+          summary: summarize(s.id, snap),
+        })),
+      })
     }),
   )
 
@@ -329,27 +484,59 @@ export function createApp(opts: AppOptions) {
     requireAdmin(async (req, res) => {
       const student = await repo.findUserById(db, req.params!.id)
       if (!student || student.role !== 'user') throw new HttpError(404, 'Not found')
-      send(res, 200, { profile: repo.toProfile(student), detail: studentDetail(student.id, await repo.snapshot(db, [student.id])) })
+      send(res, 200, {
+        profile: { ...repo.toProfile(student), teacher: await teacherOf(student) },
+        linkedAt: student.teacher_linked_at,
+        detail: studentDetail(student.id, await repo.snapshot(db, [student.id])),
+      })
     }),
   )
 
-  /** Every account with its role, for the admin role manager. */
+  /** Every account with its role (teachers with their reference ID, students with their teacher), for the role manager. */
   route(
     'GET',
     '/api/admin/users',
-    requireAdmin(async (_req, res) => send(res, 200, { users: (await repo.listUsers(db)).map(repo.toAccount) })),
+    requireAdmin(async (_req, res) => {
+      const users = await repo.listUsers(db)
+      const names = new Map(users.filter((u) => u.role === 'teacher').map((u) => [u.id, u.name]))
+      const codes = new Map<string, repo.TeacherCodeRow>()
+      for (const u of users) {
+        if (u.role !== 'teacher') continue
+        const c = await repo.currentTeacherCode(db, u.id)
+        if (c) codes.set(u.id, c)
+      }
+      send(res, 200, {
+        users: users.map((u) => ({
+          ...repo.toAccount(u),
+          teacherName: u.role === 'user' && u.teacher_id ? (names.get(u.teacher_id) ?? null) : null,
+          teacherCode: codes.has(u.id) ? codeBody(codes.get(u.id)!) : null,
+        })),
+      })
+    }),
   )
 
-  /** Admins decide who is a student ('user') and who is an admin. */
+  /** Admins can also disable, re-enable or replace a teacher's reference ID. */
+  route(
+    'PATCH',
+    '/api/admin/teachers/:id/code',
+    requireAdmin(async (req, res, body) => {
+      const action = codeAction(obj(body).action)
+      const teacher = await repo.findUserById(db, req.params!.id)
+      if (!teacher || teacher.role !== 'teacher') throw new HttpError(404, 'Not found')
+      send(res, 200, { code: codeBody(await repo.updateTeacherCode(db, teacher.id, action)) })
+    }),
+  )
+
+  /** Admins decide who is a student ('user'), a teacher or an admin. Nobody else can grant a role. */
   route(
     'PATCH',
     '/api/admin/users/:id/role',
     requireAdmin(async (req, res, body) => {
       const role = obj(body).role
-      if (role !== 'user' && role !== 'admin') throw new HttpError(400, 'Role must be "user" or "admin".')
+      if (!SERVER_ROLES.includes(role as ServerRole)) throw new HttpError(400, 'Role must be "user", "teacher" or "admin".')
       // an admin cannot demote themselves, so there is always at least one admin left
       if (req.params!.id === req.auth!.userId) throw new HttpError(400, 'You cannot change your own role.')
-      const updated = await repo.setUserRole(db, req.params!.id, role, req.auth!.userId)
+      const updated = await repo.setUserRole(db, req.params!.id, role as ServerRole, req.auth!.userId)
       if (!updated) throw new HttpError(404, 'Not found')
       send(res, 200, { user: repo.toAccount(updated) })
     }),

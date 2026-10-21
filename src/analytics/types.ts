@@ -1,10 +1,11 @@
-export type ExperimentId = 'bloch-h' | 'bloch-x' | 'bloch-z' | 'measure-h' | 'measure-cnot'
+export type ExperimentId = 'bloch-h' | 'bloch-x' | 'bloch-z' | 'measure-h' | 'measure-z' | 'measure-cnot'
 
 export const EXPERIMENTS: { id: ExperimentId; group: 'Bloch Sphere' | 'Measurement'; gate: string; title: string }[] = [
   { id: 'bloch-h', group: 'Bloch Sphere', gate: 'H', title: 'Bloch Sphere · Hadamard' },
   { id: 'bloch-x', group: 'Bloch Sphere', gate: 'X', title: 'Bloch Sphere · Pauli-X' },
   { id: 'bloch-z', group: 'Bloch Sphere', gate: 'Z', title: 'Bloch Sphere · Pauli-Z' },
   { id: 'measure-h', group: 'Measurement', gate: 'H', title: 'Measurement · Hadamard' },
+  { id: 'measure-z', group: 'Measurement', gate: 'Z', title: 'Measurement · Pauli-Z' },
   { id: 'measure-cnot', group: 'Measurement', gate: 'CNOT', title: 'Measurement · CNOT' },
 ]
 
@@ -22,8 +23,12 @@ export const EVENT_TYPES = [
   'measurement',
   'reset',
   'example_loaded',
+  'teacher_linked',
 ] as const
 export type EventType = (typeof EVENT_TYPES)[number]
+
+/** Recorded by the server itself; uploads from the page may not claim them. */
+export const SERVER_ONLY_EVENTS: readonly EventType[] = ['teacher_linked']
 
 export interface AnalyticsEvent {
   id: string
@@ -61,8 +66,8 @@ export interface AnalyticsStore {
   putRun(r: RunRecord): void
   getSession(id: string): SessionRecord | undefined
   getRun(id: string): RunRecord | undefined
-  /** Upload anything queued; resolves once the server has it (or the attempt failed). */
-  flush(): Promise<void>
+  /** Upload anything queued; resolves true once the server has it, false if the upload failed (it is retried). */
+  flush(): Promise<boolean>
 }
 
 /** Activity status thresholds (configurable). */
@@ -81,12 +86,30 @@ export interface StudentSummary {
   sessions: number
   sessionTimeMs: number
   labTimeMs: number
-  /** Distinct experiments opened at least once (0–5). */
+  /** Distinct experiments opened at least once (0 – EXPERIMENTS.length). */
   experimentsStarted: number
-  /** Distinct experiments completed (0–5). */
+  /** Distinct experiments completed (0 – EXPERIMENTS.length). */
   experimentsCompleted: number
   completedIds: ExperimentId[]
   completionPct: number
+  /** The experiment the student worked on most recently. */
+  lastExperiment: { id: ExperimentId; at: number } | null
+}
+
+/** One opening of an experiment, as the student's history shows it. */
+export interface RunHistoryItem {
+  id: string
+  experiment: ExperimentId
+  startedAt: number
+  lastSeenAt: number
+  completedAt: number | null
+  timeMs: number
+  /** Measurement shots taken during this run. */
+  shots: number
+  /** Gates used, e.g. "H → Z" (from the completion record). */
+  circuit: string | null
+  /** Outcome recorded at completion, e.g. "|0⟩ → |+⟩" or "|00⟩ 51% · |11⟩ 49%". */
+  result: string | null
 }
 
 export interface StudentDetail extends StudentSummary {
@@ -96,5 +119,7 @@ export interface StudentDetail extends StudentSummary {
   wireConnections: number
   resets: number
   recentSessions: SessionRecord[]
+  /** Most recent runs first. */
+  history: RunHistoryItem[]
   timeline: AnalyticsEvent[]
 }

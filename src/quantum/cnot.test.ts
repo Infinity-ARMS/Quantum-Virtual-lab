@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { makeConn, resolveDouble, vizSignal, type Connection } from '../lab/circuit'
+import { makeConn, resolveDouble, tryConnect, vizSignal, type Connection } from '../lab/circuit'
 import { graphReadout } from '../lab/readout'
 import { addShots, measure } from './measurement'
-import { applyGate, basis } from './singleQubit'
+import { applyGate, basis, probabilities } from './singleQubit'
 import { applyCNOT, kron, probabilities2, TWO_QUBIT_LABELS } from './twoQubit'
 
 const close = (a: number[], b: number[]) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i], 12))
@@ -87,5 +87,82 @@ describe('shot counters (hardware: counts keep adding up until RESET)', () => {
     const seq = [0.1, 0.9, 0.49, 0.51]
     let i = 0
     expect(measure([0.5, 0.5], 4, () => seq[i++])).toEqual([2, 2])
+  })
+})
+
+/** Plug cables in order through the same validation the kit uses. */
+function wire(...pairs: [string, string][]): Connection[] {
+  let conns: Connection[] = []
+  for (const [a, b] of pairs) {
+    const r = tryConnect(conns, a, b)
+    if (!r.ok) throw new Error(`${a} → ${b}: ${r.msg}`)
+    conns = r.conns
+  }
+  return conns
+}
+
+describe('CNOT acts on the actual state it receives (H → CNOT)', () => {
+  it('|0⟩ → H → CNOT Q0 with Q1 = |0⟩ gives the Bell state (|00⟩ + |11⟩)/√2', () => {
+    const conns = wire(['s.src0', 's.H.in'], ['s.H.out', 'd.cnot.cin'], ['d.q1.src0', 'd.cnot.tin'])
+    const reg = resolveDouble(conns)!
+    close(probabilities2(reg.state), [0.5, 0, 0, 0.5])
+    expect(reg.state[0].re).toBeCloseTo(Math.SQRT1_2, 12)
+    expect(reg.state[3].re).toBeCloseTo(Math.SQRT1_2, 12)
+  })
+
+  it('|1⟩ → H → CNOT Q0 gives (|00⟩ − |11⟩)/√2: the minus sign of |−⟩ is carried through', () => {
+    const reg = resolveDouble(wire(['s.src1', 's.H.in'], ['s.H.out', 'd.cnot.cin'], ['d.q1.src0', 'd.cnot.tin']))!
+    close(probabilities2(reg.state), [0.5, 0, 0, 0.5])
+    expect(reg.state[3].re).toBeCloseTo(-Math.SQRT1_2, 12)
+  })
+
+  it('H on the target line: |1⟩ ⊗ |+⟩ is unchanged by CNOT (|+⟩ is an X eigenstate)', () => {
+    const reg = resolveDouble(wire(['d.q0.src1', 'd.cnot.cin'], ['s.H.out', 'd.cnot.tin'], ['s.src0', 's.H.in']))!
+    close(probabilities2(reg.state), [0, 0, 0.5, 0.5])
+  })
+
+  it('measured counts of the Bell state vary from run to run and only ever show |00⟩ or |11⟩', () => {
+    const probs = probabilities2(resolveDouble(wire(['s.src0', 's.H.in'], ['s.H.out', 'd.cnot.cin'], ['d.q1.src0', 'd.cnot.tin']))!.state)
+    const runs = Array.from({ length: 8 }, () => measure(probs, 1000))
+    for (const r of runs) {
+      expect(r[1] + r[2]).toBe(0)
+      expect(r[0] + r[3]).toBe(1000)
+    }
+    expect(new Set(runs.map((r) => r.join(','))).size).toBeGreaterThan(1)
+  })
+
+  it('a computational-basis input stays deterministic: |10⟩ → |11⟩ is 100% every run', () => {
+    const probs = probabilities2(resolveDouble(wire(['d.q0.src1', 'd.cnot.cin'], ['d.q1.src0', 'd.cnot.tin']))!.state)
+    for (let run = 0; run < 5; run++) expect(measure(probs, 1000)).toEqual([0, 0, 0, 1000])
+  })
+
+  it('wiring H → CNOT after the Q1 cable is refused with a hint about the order', () => {
+    const conns = wire(['d.q1.src0', 'd.cnot.tin'])
+    const r = tryConnect(conns, 's.src0', 's.H.in')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.msg).toMatch(/wire H OUT to a CNOT input first/)
+    // the other order works
+    expect(wire(['d.q1.src0', 'd.cnot.tin'], ['s.H.out', 'd.cnot.cin'], ['s.src0', 's.H.in'])).toHaveLength(3)
+  })
+
+  it('CNOT outputs go only to their output pins', () => {
+    const r = tryConnect([], 'd.cnot.cout', 's.H.in')
+    expect(r.ok).toBe(false)
+  })
+})
+
+describe('Pauli-Z measurement: Z changes the phase, not the computational-basis probabilities', () => {
+  it('Z|0⟩ measures |0⟩ 100% and Z|1⟩ measures |1⟩ 100%', () => {
+    close(probabilities(applyGate('Z', basis(0))), [1, 0])
+    close(probabilities(applyGate('Z', basis(1))), [0, 1])
+    expect(measure(probabilities(applyGate('Z', basis(0))), 500)).toEqual([500, 0])
+    expect(measure(probabilities(applyGate('Z', basis(1))), 500)).toEqual([0, 500])
+  })
+
+  it('H → Z still measures 50/50 (the phase flip is invisible in this basis), sampled per shot', () => {
+    const p = probabilities(applyGate('Z', applyGate('H', basis(0))))
+    close(p, [0.5, 0.5])
+    const runs = new Set(Array.from({ length: 8 }, () => measure(p, 1000).join(',')))
+    expect(runs.size).toBeGreaterThan(1)
   })
 })

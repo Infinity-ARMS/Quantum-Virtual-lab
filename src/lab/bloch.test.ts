@@ -68,8 +68,9 @@ describe('kit wiring rules', () => {
     expect(refused([], 'd.q0.src1', 'viz.graph.q0')).toMatch(/gate IN first|through the CNOT/)
   })
 
-  it('gates are not chained', () => {
-    expect(refused([], 's.H.out', 's.Z.in')).toMatch(/not chained/)
+  it('a gate cannot feed itself or loop back on its own input', () => {
+    expect(refused([], 's.H.out', 's.H.in')).toMatch(/cannot feed itself/)
+    expect(refused(wire(['s.H.out', 's.Z.in']), 's.Z.out', 's.H.in')).toMatch(/loop/)
   })
 
   it('one experiment at a time: a second gate input is refused until the first is unplugged', () => {
@@ -98,5 +99,38 @@ describe('kit wiring rules', () => {
     expect(refused([], 'd.q1.src0', 'd.cnot.cin')).toMatch(/Q0 states/)
     expect(refused([], 'd.q0.src1', 'd.cnot.tin')).toMatch(/Q1 states/)
     expect(wire(['d.q0.src1', 'd.cnot.cin'], ['d.q1.src0', 'd.cnot.tin'])).toHaveLength(2)
+  })
+})
+
+describe('gate chaining (each gate acts on the state it receives)', () => {
+  const chainAt = (src: 0 | 1, ...gates: string[]) => {
+    const pairs: [string, string][] = [[`s.src${src}`, `s.${gates[0]}.in`]]
+    gates.slice(1).forEach((g, i) => pairs.push([`s.${gates[i]}.out`, `s.${g}.in`]))
+    pairs.push([`s.${gates[gates.length - 1]}.out`, 'viz.bloch.q0'])
+    return wire(...pairs)
+  }
+
+  it('|0⟩ → H → Z lands on |−⟩ (−X): Z flips the phase of the H output', () => expectVec(outputAt(chainAt(0, 'H', 'Z')), [-1, 0, 0]))
+  it('|0⟩ → X → H lands on |−⟩', () => expectVec(outputAt(chainAt(0, 'X', 'H')), [-1, 0, 0]))
+  it('|0⟩ → X → H → Z lands on |+⟩ (three gates in a row)', () => expectVec(outputAt(chainAt(0, 'X', 'H', 'Z')), [1, 0, 0]))
+
+  it('the experiment is the last gate of the chain', () => {
+    const conns = wire(['s.src0', 's.H.in'], ['s.H.out', 's.Z.in'])
+    expect(activeSingleGate(conns)).toBe('Z')
+    expect(wire(['s.src0', 's.H.in'], ['s.H.out', 's.Z.in'], ['s.Z.out', 'pin.Z'])).toHaveLength(3)
+  })
+
+  it('a qubit cannot be copied: moving a gate OUT cable unplugs its old destination', () => {
+    const r = tryConnect(wire(['s.src0', 's.H.in'], ['s.H.out', 'pin.H']), 's.H.out', 's.Z.in')
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.msg).toMatch(/unplugged from H OUT pin/)
+    expect(outputWired(r.conns, 's.H.out')).toBe(false)
+    expect(r.conns.filter((c) => c.from === 's.H.out')).toHaveLength(1)
+  })
+
+  it('a second, separate chain is still refused (one experiment at a time)', () => {
+    const conns = wire(['s.src0', 's.H.in'], ['s.H.out', 's.Z.in'])
+    expect(refused(conns, 's.src1', 's.X.in')).toMatch(/One experiment at a time — unplug the H IN cable/)
   })
 })

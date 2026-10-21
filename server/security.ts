@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomBytes, randomInt, scryptSync, timingSafeEqual } from 'node:crypto'
 
 // ---------------------------------------------------------------- passwords (scrypt, per-user salt)
 
@@ -24,7 +24,8 @@ export const verifyAgainstDummy = (password: string) => void verifyPassword(pass
 
 // ---------------------------------------------------------------- signed tokens (HS256 JWT)
 
-export type ServerRole = 'user' | 'admin'
+export type ServerRole = 'user' | 'teacher' | 'admin'
+export const SERVER_ROLES: readonly ServerRole[] = ['user', 'teacher', 'admin']
 
 export interface TokenClaims {
   sub: string
@@ -54,10 +55,30 @@ export function verifyToken(token: string, secret: string, now = Date.now()): To
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null
   try {
     const c = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as TokenClaims
-    if (typeof c.sub !== 'string' || (c.role !== 'user' && c.role !== 'admin')) return null
+    if (typeof c.sub !== 'string' || !SERVER_ROLES.includes(c.role)) return null
     if (typeof c.exp !== 'number' || c.exp * 1000 <= now) return null
     return c
   } catch {
     return null
   }
+}
+
+// ---------------------------------------------------------------- teacher reference IDs
+
+/** No 0/O, 1/I/L: easy to read out in class and to type. */
+const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'
+export const TEACHER_CODE = /^QL-TEA-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/
+
+/** A random public linking code such as QL-TEA-8K42 (not a secret, and never derived from database ids). */
+export function newTeacherCode(): string {
+  let s = ''
+  for (let i = 0; i < 4; i++) s += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]
+  return `QL-TEA-${s}`
+}
+
+/** Accept what students type: any case, spaces, missing dashes ("ql tea 8k42", "qltea8k42"). */
+export function normalizeTeacherCode(input: string): string {
+  const raw = input.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const body = raw.startsWith('QLTEA') ? raw.slice(5) : raw
+  return `QL-TEA-${body}`
 }

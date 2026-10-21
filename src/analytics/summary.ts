@@ -3,7 +3,7 @@
  * Explicit .ts extensions let Node run this file directly on the server.
  */
 import { ACTIVITY_THRESHOLDS, EXPERIMENTS } from './types.ts'
-import type { ActivityStatus, AnalyticsEvent, RunRecord, SessionRecord, StudentDetail, StudentSummary } from './types.ts'
+import type { ActivityStatus, AnalyticsEvent, RunHistoryItem, RunRecord, SessionRecord, StudentDetail, StudentSummary } from './types.ts'
 
 export interface Snapshot {
   events: AnalyticsEvent[]
@@ -28,9 +28,10 @@ export function summarize(userId: string, snap: Snapshot): StudentSummary {
   const runs = snap.runs.filter((r) => r.userId === userId)
   const stamps = [...events.map((e) => e.at), ...sessions.map((s) => s.endedAt ?? s.lastSeenAt)]
   const lastActive = stamps.length ? Math.max(...stamps) : null
-  // a student has 5 experiments; opening one several times creates several runs but it is still one experiment
+  // each experiment counts once, however many times it was opened (each opening is its own run)
   const startedIds = new Set(runs.map((r) => r.experiment))
   const completedIds = [...new Set(runs.filter((r) => r.completedAt).map((r) => r.experiment))]
+  const latest = runs.reduce<RunRecord | null>((a, r) => (!a || r.lastSeenAt > a.lastSeenAt ? r : a), null)
   return {
     userId,
     status: activityStatus(lastActive),
@@ -43,7 +44,33 @@ export function summarize(userId: string, snap: Snapshot): StudentSummary {
     experimentsCompleted: completedIds.length,
     completedIds,
     completionPct: Math.round((completedIds.length / EXPERIMENTS.length) * 100),
+    lastExperiment: latest ? { id: latest.experiment, at: latest.lastSeenAt } : null,
   }
+}
+
+/** Records a few seconds after a run's last heartbeat still belong to it (shots are uploaded in batches). */
+const RUN_GRACE_MS = 5000
+
+/** Each run with the shots and completion result recorded while it was open. */
+export function runHistory(runs: RunRecord[], events: AnalyticsEvent[], limit = 40): RunHistoryItem[] {
+  return [...runs]
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .slice(0, limit)
+    .map((r) => {
+      const during = (e: AnalyticsEvent) => e.experiment === r.experiment && e.at >= r.startedAt && e.at <= r.lastSeenAt + RUN_GRACE_MS
+      const done = r.completedAt ? events.find((e) => e.type === 'experiment_complete' && during(e)) : undefined
+      return {
+        id: r.id,
+        experiment: r.experiment,
+        startedAt: r.startedAt,
+        lastSeenAt: r.lastSeenAt,
+        completedAt: r.completedAt ?? null,
+        timeMs: runDuration(r),
+        shots: events.filter((e) => e.type === 'measurement' && during(e)).reduce((t, e) => t + Number(e.detail?.shots ?? 0), 0),
+        circuit: typeof done?.detail?.circuit === 'string' ? done.detail.circuit : null,
+        result: typeof done?.detail?.result === 'string' ? done.detail.result : null,
+      }
+    })
 }
 
 export function studentDetail(userId: string, snap: Snapshot): StudentDetail {
@@ -75,6 +102,7 @@ export function studentDetail(userId: string, snap: Snapshot): StudentDetail {
       .filter((s) => s.userId === userId)
       .sort((a, b) => b.startedAt - a.startedAt)
       .slice(0, 8),
+    history: runHistory(runs, events),
     timeline: events
       .filter((e) => e.type !== 'page_view')
       .sort((a, b) => b.at - a.at)

@@ -1,21 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { analytics } from '../../analytics/analyticsService'
-import type { ExperimentId } from '../../analytics/types'
+import { EXPERIMENTS, type ExperimentId } from '../../analytics/types'
 import { useExperimentRun } from '../../analytics/useExperimentRun'
 import { KitButton, PowerSwitch } from '../../components/kit/KitControls'
-import { KitScreen, type CnotScreen, type GraphView, type ScreenMode, type SingleScreen } from '../../components/kit/KitScreen'
+import { KitScreen, type CnotLine, type CnotScreen, type GraphView, type ScreenMode, type SingleScreen } from '../../components/kit/KitScreen'
 import { LabToast } from '../../components/lab/LabChrome'
 import { WireLayer } from '../../components/QuantumWire'
 import { Socket } from '../../components/Socket'
-import { activeSingleGate, inputBit, outputWired, resolveDouble, resolveSingle } from '../../lab/circuit'
+import {
+  activeExperiment,
+  lineSignal,
+  missingInput,
+  outputWired,
+  resolveDouble,
+  resolveSingle,
+  type Experiment,
+  type SingleSignal,
+} from '../../lab/circuit'
 import { LabContext } from '../../lab/LabContext'
 import { SINGLE_LABELS } from '../../lab/readout'
 import { useLabWiring } from '../../lab/useLabWiring'
 import { useOutputReveal } from '../../lab/useOutputReveal'
 import type { GateName } from '../../quantum/gates'
 import { measure } from '../../quantum/measurement'
-import { basis, blochVector, probabilities, stateName, type Qubit } from '../../quantum/singleQubit'
-import { probabilities2, TWO_QUBIT_LABELS } from '../../quantum/twoQubit'
+import { basis, blochVector, nameFromBloch, probabilities, stateName, type Qubit } from '../../quantum/singleQubit'
+import { formatKet2, probabilities2, reducedBloch, TWO_QUBIT_LABELS } from '../../quantum/twoQubit'
+import { CompletionDialog, type Completion } from './CompletionDialog'
 
 type Lab = 'bloch' | 'measurement'
 type Bit = 0 | 1
@@ -38,12 +48,13 @@ const LABS: Record<
     ],
   },
   measurement: {
-    gates: ['H'],
+    gates: ['H', 'Z'],
     cnot: true,
     mode: 'graph',
     storage: 'qlab-kit-measurement',
     pins: [
       { id: 'pin.H', label: 'H OUT' },
+      { id: 'pin.Z', label: 'Z OUT' },
       { id: 'pin.q0', label: 'CNOT Q0 OUT' },
       { id: 'pin.q1', label: 'CNOT Q1 OUT' },
     ],
@@ -52,8 +63,9 @@ const LABS: Record<
 
 const BOOT_MS = 1200
 const SHOTS_TO_COMPLETE = 10
-const blochOf = (b: Bit): Vec3 => [0, 0, b === 0 ? 1 : -1]
+const RUN_OPTIONS = [100, 500, 1000] as const
 const ket = (b: Bit) => `|${b}⟩`
+const EXP_TITLE = Object.fromEntries(EXPERIMENTS.map((e) => [e.id, e.title])) as Record<ExperimentId, string>
 
 /** Name of a state on this kit, showing a global phase of −1 on a basis state (Z|1⟩ = −|1⟩). */
 function ketOf(q: Qubit): string {
@@ -63,17 +75,29 @@ function ketOf(q: Qubit): string {
   return name
 }
 
-/** Which experiment a cable belongs to, for activity records. */
+/** "|0⟩ → H → Z": the initial state and the gates it passes through. */
+const pathOf = (s: SingleSignal) => [ket(s.source), ...s.gates].join(' → ')
+
+/** The experiment a lab records for what is wired. */
+function experimentId(lab: Lab, e: Experiment): ExperimentId {
+  if (lab === 'bloch') return `bloch-${e.toLowerCase()}` as ExperimentId
+  return e === 'CNOT' ? 'measure-cnot' : e === 'Z' ? 'measure-z' : 'measure-h'
+}
+
+/** Which experiment a new cable belongs to, for activity records. */
 function experimentOfCable(lab: Lab, from: string, to: string): ExperimentId {
-  if (lab === 'measurement') return from.startsWith('s.') || to.startsWith('s.') || to === 'pin.H' ? 'measure-h' : 'measure-cnot'
-  const g = [to, from].map((s) => s.split('.')[1]).find((x) => x === 'X' || x === 'H' || x === 'Z') ?? 'H'
-  return `bloch-${g.toLowerCase()}` as ExperimentId
+  const gate = (s: string): Experiment | null =>
+    s.startsWith('d.cnot') || s === 'pin.q0' || s === 'pin.q1'
+      ? 'CNOT'
+      : ((['X', 'H', 'Z'] as GateName[]).find((g) => s === `s.${g}.in` || s === `pin.${g}`) ?? null)
+  return experimentId(lab, gate(to) ?? gate(from) ?? 'H')
 }
 
 /**
- * The experiment page: a copy of the hardware kit's front panel. Initial states → gate IN, gate OUT → output
- * banana pin; the TFT shows the input state as soon as it is connected and moves to the result when the output
- * pin is wired. BLOCH SPHERE / PROBABILITY GRAPH switch the screen, SHOT measures once per press, RESET clears.
+ * The experiment page: a copy of the hardware kit's front panel. Initial states → gate IN (gates may be chained,
+ * e.g. H OUT → Z IN or H OUT → CNOT IN), last gate OUT → its output banana pin. The TFT shows the input state as
+ * soon as it is connected and moves to the result when the output pin is wired. BLOCH SPHERE / PROBABILITY GRAPH
+ * switch the screen, SHOT measures once per press, RUN takes the selected number of shots, RESET clears.
  */
 export function KitLab({ lab }: { lab: Lab }) {
   const cfg = LABS[lab]
@@ -84,8 +108,10 @@ export function KitLab({ lab }: { lab: Lab }) {
   const [booting, setBooting] = useState(true)
   const [mode, setMode] = useState<ScreenMode>(cfg.mode)
   const [view, setView] = useState<GraphView>('measured')
+  const [runShots, setRunShots] = useState<number>(1000)
   const [counts, setCounts] = useState<{ key: string; counts: number[]; total: number; last: { n: number; outcome: number } | null } | null>(null)
   const [notice, setNotice] = useState<{ id: number; text: string; tone: 'info' | 'warn' } | null>(null)
+  const [completion, setCompletion] = useState<Completion | null>(null)
 
   useEffect(() => {
     if (!power || !booting) return
@@ -100,122 +126,172 @@ export function KitLab({ lab }: { lab: Lab }) {
   const say = useCallback((text: string, tone: 'info' | 'warn' = 'info') => setNotice({ id: Date.now(), text, tone }), [])
 
   // ---------------------------------------------------------------- connection detectors
-  const gate = activeSingleGate(conns)
-  const cnotOn = cfg.cnot && conns.some((c) => c.to === 'd.cnot.cin' || c.to === 'd.cnot.tin')
-  const exp: GateName | 'CNOT' | null = gate ?? (cnotOn ? 'CNOT' : null)
+  const wired = activeExperiment(conns)
+  const exp: Experiment | null = wired && (wired === 'CNOT' ? cfg.cnot : cfg.gates.includes(wired)) ? wired : null
+  const head: GateName | null = exp && exp !== 'CNOT' ? exp : null
+  const cnotOn = exp === 'CNOT'
   const ready = power && !booting
 
-  // single qubit: input state first, output once the gate OUT is wired to its pin
-  const input = gate ? inputBit(conns, `s.${gate}.in`) : null
-  const singleOut = useMemo(() => (gate ? resolveSingle(conns, `s.${gate}.out`) : null), [conns, gate])
-  const singleWired = !!gate && outputWired(conns, `s.${gate}.out`)
-  const revealed = useOutputReveal(ready && gate && input !== null ? `${gate}|${input}` : null, singleWired && !!singleOut)
+  // single qubit: the input state first, the output once the last gate's OUT is wired to its pin
+  const single$ = useMemo(() => (head ? resolveSingle(conns, `s.${head}.out`) : null), [conns, head])
+  const singleWired = !!head && outputWired(conns, `s.${head}.out`)
+  const singleKey = ready && single$ ? pathOf(single$) : null
+  const revealed = useOutputReveal(singleKey, singleWired)
 
-  // CNOT: both inputs must be set; each output pin reveals its own line
-  const q0 = cfg.cnot ? inputBit(conns, 'd.cnot.cin') : null
-  const q1 = cfg.cnot ? inputBit(conns, 'd.cnot.tin') : null
+  // CNOT: each input receives an initial state or a gate output; each output pin reveals its own line
+  const line0 = useMemo(() => (cnotOn ? lineSignal(conns, 'd.cnot.cin') : null), [conns, cnotOn])
+  const line1 = useMemo(() => (cnotOn ? lineSignal(conns, 'd.cnot.tin') : null), [conns, cnotOn])
   const dbl = useMemo(() => (cnotOn ? resolveDouble(conns) : null), [conns, cnotOn])
-  const outIdx = dbl ? dbl.state.findIndex((a) => a.re * a.re + a.im * a.im > 0.5) : -1
-  const outBits: [Bit, Bit] | null = outIdx < 0 ? null : [(outIdx >> 1) as Bit, (outIdx & 1) as Bit]
-  const cnotKey = ready && dbl ? `CNOT|${q0}${q1}` : null
+  const cnotKey = ready && dbl ? `CNOT|${pathOf(dbl.lines[0])}|${pathOf(dbl.lines[1])}` : null
   const rev0 = useOutputReveal(cnotKey, !!dbl && outputWired(conns, 'd.cnot.cout'))
   const rev1 = useOutputReveal(cnotKey, !!dbl && outputWired(conns, 'd.cnot.tout'))
 
   // ---------------------------------------------------------------- what the TFT shows
   const single: SingleScreen | null =
-    ready && gate && input !== null
+    ready && head && single$
       ? (() => {
-          const state = revealed && singleOut ? singleOut.state : basis(input)
+          const state = revealed ? single$.state : basis(single$.source)
           return {
-            gate,
-            inputKet: ket(input),
+            circuit: single$.gates.join(' → '),
+            head,
+            inputKet: ket(single$.source),
             shownKet: ketOf(state),
             shownVec: blochVector(state),
-            outputKet: singleOut ? ketOf(singleOut.state) : null,
-            revealed: revealed && !!singleOut,
+            outputKet: ketOf(single$.state),
+            revealed,
           }
         })()
       : null
+
   const cnot: CnotScreen | null =
-    ready && exp === 'CNOT'
-      ? {
-          q0,
-          q1,
-          out: outBits,
-          revealed: [rev0, rev1],
-          vec: [
-            q0 === null ? null : blochOf(rev0 && outBits ? outBits[0] : q0),
-            q1 === null ? null : blochOf(rev1 && outBits ? outBits[1] : q1),
-          ],
-        }
+    ready && cnotOn
+      ? (() => {
+          const line = (sig: SingleSignal | null, i: 0 | 1, rev: boolean): CnotLine => {
+            if (!sig) return { inKet: null, outKet: null, vec: null }
+            const inKet = ketOf(sig.state)
+            if (!rev || !dbl) return { inKet, outKet: null, vec: blochVector(sig.state) }
+            // one line of a two-qubit state: its reduced Bloch vector, shorter than 1 when the qubits are entangled
+            const vec = reducedBloch(dbl.state, i) as Vec3
+            return { inKet, outKet: Math.hypot(...vec) > 0.999 ? (nameFromBloch(vec) ?? '|ψ⟩') : 'entangled', vec }
+          }
+          const lines: [CnotLine, CnotLine] = [line(line0, 0, rev0), line(line1, 1, rev1)]
+          const both = !!dbl && rev0 && rev1
+          return { lines, outState: both ? formatKet2(dbl!.state) : null, entangled: both && lines.some((l) => l.outKet === 'entangled') }
+        })()
       : null
 
-  // probability graph: the H gate output, or the full CNOT output (both pins wired)
-  const graph =
-    exp === 'H' && single?.revealed && singleOut
-      ? { labels: SINGLE_LABELS, probs: probabilities(singleOut.state) as number[], accent: 'blue' as const }
-      : exp === 'CNOT' && dbl && rev0 && rev1
-        ? { labels: TWO_QUBIT_LABELS, probs: probabilities2(dbl.state), accent: 'purple' as const }
-        : null
-  const countsKey = graph ? (exp === 'H' ? `H|${input}` : `CNOT|${q0}${q1}`) : null
+  // probability graph: the revealed output of the single-qubit circuit, or the full CNOT output (both pins wired)
+  const graph = single?.revealed
+    ? { labels: SINGLE_LABELS, probs: probabilities(single$!.state) as number[], accent: 'blue' as const }
+    : cnotOn && dbl && rev0 && rev1
+      ? { labels: TWO_QUBIT_LABELS, probs: probabilities2(dbl.state), accent: 'purple' as const }
+      : null
+  const countsKey = graph ? (single?.revealed ? singleKey : cnotKey) : null
   const current = counts && counts.key === countsKey ? counts : null
 
+  const firstEmpty = head ? missingInput(conns, head) : null
   const graphBlocked = !exp
     ? 'Connect a gate input'
-    : exp === 'X' || exp === 'Z'
-      ? 'The probability graph is for the H gate and the CNOT gate'
-      : exp === 'H'
-        ? 'Connect H OUT to the H OUT pin to measure'
-        : 'Connect both CNOT inputs and both outputs to measure'
+    : head
+      ? firstEmpty
+        ? `Connect |0⟩ or |1⟩ to ${firstEmpty} IN`
+        : `Connect ${head} OUT to the ${head} OUT pin to measure`
+      : 'Connect both CNOT inputs and both outputs to measure'
 
   const phase = !exp
     ? 'Waiting for input'
-    : exp === 'CNOT'
-      ? q0 === null || q1 === null
+    : cnotOn
+      ? !line0 || !line1
         ? 'Waiting for input'
         : rev0 && rev1
           ? 'Output state'
           : 'Waiting for output'
-      : single?.revealed
-        ? 'Output state'
-        : singleWired
-          ? 'Output detected'
-          : 'Waiting for output'
+      : !single
+        ? 'Waiting for input'
+        : single.revealed
+          ? 'Output state'
+          : singleWired
+            ? 'Output detected'
+            : 'Waiting for output'
 
+  const measureHint =
+    mode === 'graph'
+      ? `Press SHOT to measure once, or RUN for ${runShots.toLocaleString()} shots`
+      : 'Press PROBABILITY GRAPH, then SHOT or RUN to measure'
   const hint = !exp
     ? cfg.cnot
-      ? 'Connect |0⟩ or |1⟩ to H IN, or Q0 and Q1 states to the CNOT gate — drag a cable between two jacks'
-      : 'Connect |0⟩ or |1⟩ to a gate IN — drag a cable between two jacks, or tap one then the other'
-    : exp === 'CNOT'
-      ? q0 === null || q1 === null
-        ? 'Connect a Q0 state to CNOT Q0 IN and a Q1 state to CNOT Q1 IN'
+      ? 'Connect |0⟩ or |1⟩ to a gate IN, or Q0 and Q1 states to the CNOT — gates can be chained, e.g. H OUT → CNOT Q0 IN'
+      : 'Connect |0⟩ or |1⟩ to a gate IN — gates can be chained, e.g. H OUT → Z IN; drag a cable or tap two jacks'
+    : cnotOn
+      ? !line0 || !line1
+        ? 'Feed CNOT Q0 IN and Q1 IN: a Q0/Q1 state, or a gate OUT such as H OUT'
         : !(rev0 && rev1)
           ? 'Connect CNOT Q0 OUT and Q1 OUT to their output pins'
-          : mode === 'graph'
-            ? 'Press SHOT to measure once — hold it to keep measuring'
-            : 'Press PROBABILITY GRAPH, then SHOT to measure'
-      : !single?.revealed
-        ? `Connect ${exp} OUT to the ${exp} OUT pin`
-        : exp === 'H'
-          ? mode === 'graph'
-            ? 'Press SHOT to measure once — hold it to keep measuring'
-            : 'Press PROBABILITY GRAPH, then SHOT to measure'
-          : 'Output complete'
+          : measureHint
+      : firstEmpty
+        ? `Connect |0⟩ or |1⟩ to ${firstEmpty} IN`
+        : !single?.revealed
+          ? `Connect ${head} OUT to the ${head} OUT pin`
+          : lab === 'measurement'
+            ? measureHint
+            : 'Output complete — chain another gate, or press PROBABILITY GRAPH to measure'
 
-  const chip = !ready || !exp ? null : exp === 'CNOT' ? `CNOT · Q0 ${q0 === null ? '—' : ket(q0)} · Q1 ${q1 === null ? '—' : ket(q1)}` : `${exp} gate · ${input === null ? '—' : ket(input)}`
+  const chip = !ready || !exp
+    ? null
+    : cnotOn
+      ? `CNOT · Q0 ${line0 ? ketOf(line0.state) : '—'} · Q1 ${line1 ? ketOf(line1.state) : '—'}`
+      : single$
+        ? pathOf(single$)
+        : `${head} gate`
 
   // ---------------------------------------------------------------- activity records
-  const expId: ExperimentId | null = !exp
-    ? null
-    : lab === 'bloch'
-      ? (`bloch-${exp.toLowerCase()}` as ExperimentId)
-      : exp === 'CNOT'
-        ? 'measure-cnot'
-        : 'measure-h'
+  const expId: ExperimentId | null = exp ? experimentId(lab, exp) : null
   const complete = lab === 'bloch' ? !!single?.revealed : (current?.total ?? 0) >= SHOTS_TO_COMPLETE
-  useExperimentRun(expId, complete)
+  const resultText = (): string => {
+    if (lab === 'bloch' && single) return `${single.inputKet} → ${single.outputKet ?? '—'}`
+    if (!graph || !current) return ''
+    return graph.labels
+      .map((l, i) => [l, current.counts[i]] as const)
+      .filter(([, n]) => n > 0)
+      .map(([l, n]) => `${l} ${Math.round((n / current.total) * 100)}%`)
+      .join(' · ')
+  }
+  const circuitText = () =>
+    cnotOn ? `Q0 ${line0 ? pathOf(line0) : '—'} · Q1 ${line1 ? pathOf(line1) : '—'} → CNOT` : single$ ? pathOf(single$) : ''
+  const completedAt = useExperimentRun(expId, complete, () => ({
+    circuit: circuitText().slice(0, 64),
+    result: resultText().slice(0, 64),
+    ...(lab === 'measurement' ? { shots: current?.total ?? 0 } : {}),
+  }))
 
-  // shots are reported in batches rather than one record per press
+  // a new experiment on the kit counts as the student choosing that gate
+  useEffect(() => {
+    if (expId) analytics.trackGateSelected(expId)
+  }, [expId])
+
+  // the completion summary, once per completed run (on the Bloch lab after the arrow has moved)
+  const summary = useRef({ resultText, circuitText, total: current?.total ?? 0 })
+  summary.current = { resultText, circuitText, total: current?.total ?? 0 }
+  useEffect(() => {
+    if (!completedAt || !expId) return
+    const t = setTimeout(
+      () => {
+        const s = summary.current
+        setCompletion({
+          experiment: EXP_TITLE[expId],
+          circuit: s.circuitText(),
+          result: s.resultText(),
+          shots: lab === 'measurement' ? s.total : null,
+          at: completedAt,
+          saved: analytics.flush(),
+        })
+      },
+      lab === 'bloch' ? 1600 : 300,
+    )
+    return () => clearTimeout(t)
+  }, [completedAt, expId, lab])
+
+  // single shots are reported in batches rather than one record per press
   const shotBuffer = useRef<{ exp: ExperimentId; n: number } | null>(null)
   const shotTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const flushShots = useCallback(() => {
@@ -227,27 +303,42 @@ export function KitLab({ lab }: { lab: Lab }) {
   useEffect(() => flushShots, [flushShots])
 
   // ---------------------------------------------------------------- panel controls
+  /** Why measuring is not possible right now, or null when it is. */
+  const cannotMeasure = (): string | null => {
+    if (!exp) return 'Connect a gate input first'
+    if (graph && countsKey && expId) return null
+    if (!head) return 'Connect both CNOT inputs and both outputs first'
+    return firstEmpty ? `Connect |0⟩ or |1⟩ to ${firstEmpty} IN first` : `Connect ${head} OUT to the ${head} OUT pin first`
+  }
+
   const shot = () => {
     if (!ready) return
-    if (!exp) return say('Connect a gate input first', 'warn')
-    if (exp === 'X' || exp === 'Z') return say(`SHOT measures the H gate and the CNOT gate — not the ${exp} gate`, 'warn')
-    if (!graph || !countsKey || !expId) return say(exp === 'H' ? 'Connect H OUT to the H OUT pin first' : 'Connect both CNOT inputs and both outputs first', 'warn')
-    const outcome = measure(graph.probs, 1).indexOf(1)
+    const why = cannotMeasure()
+    if (why) return say(why, 'warn')
+    const outcome = measure(graph!.probs, 1).indexOf(1)
+    const key = countsKey!
     setCounts((prev) =>
-      prev && prev.key === countsKey
-        ? {
-            key: countsKey,
-            counts: prev.counts.map((c, i) => (i === outcome ? c + 1 : c)),
-            total: prev.total + 1,
-            last: { n: prev.total + 1, outcome },
-          }
-        : { key: countsKey, counts: graph.probs.map((_, i) => (i === outcome ? 1 : 0)), total: 1, last: { n: 1, outcome } },
+      prev && prev.key === key
+        ? { key, counts: prev.counts.map((c, i) => (i === outcome ? c + 1 : c)), total: prev.total + 1, last: { n: prev.total + 1, outcome } }
+        : { key, counts: graph!.probs.map((_, i) => (i === outcome ? 1 : 0)), total: 1, last: { n: 1, outcome } },
     )
     if (shotBuffer.current && shotBuffer.current.exp !== expId) flushShots()
-    shotBuffer.current = { exp: expId, n: (shotBuffer.current?.n ?? 0) + 1 }
+    shotBuffer.current = { exp: expId!, n: (shotBuffer.current?.n ?? 0) + 1 }
     clearTimeout(shotTimer.current)
     shotTimer.current = setTimeout(flushShots, 1500)
-    if (mode === 'bloch') say(`Shot → ${graph.labels[outcome]} · press PROBABILITY GRAPH to view`)
+    if (mode === 'bloch') say(`Shot → ${graph!.labels[outcome]} · press PROBABILITY GRAPH to view`)
+  }
+
+  /** A fresh run of `runShots` shots sampled from the circuit's probabilities, each shot its own random draw. */
+  const run = () => {
+    if (!ready) return
+    const why = cannotMeasure()
+    if (why) return say(why, 'warn')
+    flushShots()
+    setCounts({ key: countsKey!, counts: measure(graph!.probs, runShots), total: runShots, last: null })
+    analytics.trackMeasurement(expId!, runShots)
+    setView('measured')
+    if (mode === 'bloch') say(`Measured ${runShots.toLocaleString()} shots · press PROBABILITY GRAPH to view`)
   }
 
   const reset = () => {
@@ -271,8 +362,10 @@ export function KitLab({ lab }: { lab: Lab }) {
   }
 
   const footer = notice ? { text: notice.text, tone: notice.tone } : { text: hint, tone: 'hint' as const }
-  // a new gate or input state jumps straight onto the screen; only the move to the output animates
-  const snapKey = wiring.snapKey * 100 + (gate ? cfg.gates.indexOf(gate) : 9) * 10 + (input ?? 2) + (q0 ?? 2) * 3 + (q1 ?? 2)
+  // a new circuit or input state jumps straight onto the screen; only the move to the output animates
+  const snapText = `${wiring.snapKey}|${exp}|${single$ ? pathOf(single$) : ''}|${line0 ? pathOf(line0) : ''}|${line1 ? pathOf(line1) : ''}`
+  const snapKey = useMemo(() => [...snapText].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) | 0, 0), [snapText])
+  const inUse = (g: GateName) => head === g || !!single$?.gates.includes(g) || !!line0?.gates.includes(g) || !!line1?.gates.includes(g)
 
   return (
     <LabContext.Provider value={wiring.ctx}>
@@ -320,6 +413,7 @@ export function KitLab({ lab }: { lab: Lab }) {
                     graphBlocked={graphBlocked}
                     graph={graph}
                     counts={current}
+                    runShots={runShots}
                     view={view}
                     onView={setView}
                     snapKey={snapKey}
@@ -356,7 +450,7 @@ export function KitLab({ lab }: { lab: Lab }) {
                 </div>
                 <div className="hw-gates">
                   {cfg.gates.map((g) => (
-                    <div key={g} className={`hw-gate g-${g.toLowerCase()} ${gate === g ? 'is-active' : ''}`}>
+                    <div key={g} className={`hw-gate g-${g.toLowerCase()} ${inUse(g) ? 'is-active' : ''}`}>
                       <span className="hw-gate-tab">{g} GATE</span>
                       <Socket id={`s.${g}.in`} size="lg" label={<span className="hw-txt">IN</span>} />
                       <span className="hw-badge">{g}</span>
@@ -382,7 +476,7 @@ export function KitLab({ lab }: { lab: Lab }) {
                       <Socket id="d.q1.src1" size="lg" label={<span className="hw-ket one">|1⟩</span>} />
                     </div>
                   </div>
-                  <div className={`hw-box hw-cnot ${exp === 'CNOT' ? 'is-active' : ''}`}>
+                  <div className={`hw-box hw-cnot ${cnotOn ? 'is-active' : ''}`}>
                     <h3 className="hw-init-title t-double">CNOT GATE</h3>
                     <div className="hw-cnot-grid">
                       <Socket id="d.cnot.cin" size="lg" label={<span className="hw-txt">Q0 IN</span>} />
@@ -415,6 +509,30 @@ export function KitLab({ lab }: { lab: Lab }) {
                   <KitButton label="Shot" onPress={shot} repeat disabled={!power} />
                   <span className="hw-push-name t-single">SHOT</span>
                 </div>
+                <div className="hw-shots" role="radiogroup" aria-labelledby="hw-shots-title">
+                  <span id="hw-shots-title" className="hw-shots-name">
+                    TOTAL SHOTS
+                  </span>
+                  <div className="hw-shots-set">
+                    {RUN_OPTIONS.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        role="radio"
+                        aria-checked={runShots === n}
+                        className={runShots === n ? 'is-on' : ''}
+                        disabled={!power}
+                        onClick={() => setRunShots(n)}
+                      >
+                        {n.toLocaleString()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="hw-push">
+                  <KitButton label={`Run ${runShots} shots`} onPress={run} disabled={!power} />
+                  <span className="hw-push-name t-double">RUN</span>
+                </div>
                 <div className="hw-push">
                   <KitButton label="Reset" onPress={reset} disabled={!power} />
                   <span className="hw-push-name t-measure">RESET</span>
@@ -440,6 +558,7 @@ export function KitLab({ lab }: { lab: Lab }) {
           />
         </div>
         <LabToast toast={wiring.toast} />
+        {completion && <CompletionDialog completion={completion} onClose={() => setCompletion(null)} />}
       </div>
     </LabContext.Provider>
   )
