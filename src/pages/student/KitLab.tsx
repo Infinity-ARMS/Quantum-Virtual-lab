@@ -3,7 +3,7 @@ import { analytics } from '../../analytics/analyticsService'
 import { EXPERIMENTS, type ExperimentId } from '../../analytics/types'
 import { useExperimentRun } from '../../analytics/useExperimentRun'
 import { KitButton, PowerSwitch } from '../../components/kit/KitControls'
-import { KitScreen, type CnotLine, type CnotScreen, type GraphView, type ScreenMode, type SingleScreen } from '../../components/kit/KitScreen'
+import { KitScreen, type GraphView, type ScreenMode, type SingleScreen } from '../../components/kit/KitScreen'
 import { LabToast } from '../../components/lab/LabChrome'
 import { WireLayer } from '../../components/QuantumWire'
 import { Socket } from '../../components/Socket'
@@ -23,15 +23,14 @@ import { useLabWiring } from '../../lab/useLabWiring'
 import { useOutputReveal } from '../../lab/useOutputReveal'
 import type { GateName } from '../../quantum/gates'
 import { measure } from '../../quantum/measurement'
-import { basis, blochVector, nameFromBloch, probabilities, stateName, type Qubit } from '../../quantum/singleQubit'
-import { formatKet2, probabilities2, reducedBloch, TWO_QUBIT_LABELS } from '../../quantum/twoQubit'
+import { basis, blochVector, probabilities, stateName, type Qubit } from '../../quantum/singleQubit'
+import { probabilities2, TWO_QUBIT_LABELS } from '../../quantum/twoQubit'
 import { CompletionDialog, type Completion } from './CompletionDialog'
 
 type Lab = 'bloch' | 'measurement'
 type Bit = 0 | 1
-type Vec3 = [number, number, number]
 
-/** Each lab is the same kit panel with only that lab's gates mounted. */
+/** Each lab is the same kit panel with only that lab's gates mounted; its screen shows that lab's view. */
 const LABS: Record<
   Lab,
   { gates: GateName[]; cnot: boolean; mode: ScreenMode; storage: string; pins: { id: string; label: string }[] }
@@ -96,8 +95,9 @@ function experimentOfCable(lab: Lab, from: string, to: string): ExperimentId {
 /**
  * The experiment page: a copy of the hardware kit's front panel. Initial states → gate IN (gates may be chained,
  * e.g. H OUT → Z IN or H OUT → CNOT IN), last gate OUT → its output banana pin. The TFT shows the input state as
- * soon as it is connected and moves to the result when the output pin is wired. BLOCH SPHERE / PROBABILITY GRAPH
- * switch the screen, SHOT measures once per press, RUN takes the selected number of shots, RESET clears.
+ * soon as it is connected and moves to the result when the output pin is wired. The Bloch Sphere Lab's screen
+ * shows the Bloch sphere; the Measurement Lab's shows the probability graph, with SHOT (once per press), RUN (the
+ * selected number of shots) and RESET.
  */
 export function KitLab({ lab }: { lab: Lab }) {
   const cfg = LABS[lab]
@@ -106,7 +106,7 @@ export function KitLab({ lab }: { lab: Lab }) {
 
   const [power, setPower] = useState(true)
   const [booting, setBooting] = useState(true)
-  const [mode, setMode] = useState<ScreenMode>(cfg.mode)
+  const mode = cfg.mode
   const [view, setView] = useState<GraphView>('measured')
   const [runShots, setRunShots] = useState<number>(1000)
   const [counts, setCounts] = useState<{ key: string; counts: number[]; total: number; last: { n: number; outcome: number } | null } | null>(null)
@@ -163,23 +163,6 @@ export function KitLab({ lab }: { lab: Lab }) {
         })()
       : null
 
-  const cnot: CnotScreen | null =
-    ready && cnotOn
-      ? (() => {
-          const line = (sig: SingleSignal | null, i: 0 | 1, rev: boolean): CnotLine => {
-            if (!sig) return { inKet: null, outKet: null, vec: null }
-            const inKet = ketOf(sig.state)
-            if (!rev || !dbl) return { inKet, outKet: null, vec: blochVector(sig.state) }
-            // one line of a two-qubit state: its reduced Bloch vector, shorter than 1 when the qubits are entangled
-            const vec = reducedBloch(dbl.state, i) as Vec3
-            return { inKet, outKet: Math.hypot(...vec) > 0.999 ? (nameFromBloch(vec) ?? '|ψ⟩') : 'entangled', vec }
-          }
-          const lines: [CnotLine, CnotLine] = [line(line0, 0, rev0), line(line1, 1, rev1)]
-          const both = !!dbl && rev0 && rev1
-          return { lines, outState: both ? formatKet2(dbl!.state) : null, entangled: both && lines.some((l) => l.outKet === 'entangled') }
-        })()
-      : null
-
   // probability graph: the revealed output of the single-qubit circuit, or the full CNOT output (both pins wired)
   const graph = single?.revealed
     ? { labels: SINGLE_LABELS, probs: probabilities(single$!.state) as number[], accent: 'blue' as const }
@@ -214,10 +197,7 @@ export function KitLab({ lab }: { lab: Lab }) {
             ? 'Output detected'
             : 'Waiting for output'
 
-  const measureHint =
-    mode === 'graph'
-      ? `Press SHOT to measure once, or RUN for ${runShots.toLocaleString()} shots`
-      : 'Press PROBABILITY GRAPH, then SHOT or RUN to measure'
+  const measureHint = `Press SHOT to measure once, or RUN for ${runShots.toLocaleString()} shots`
   const hint = !exp
     ? cfg.cnot
       ? 'Connect |0⟩ or |1⟩ to a gate IN, or Q0 and Q1 states to the CNOT — gates can be chained, e.g. H OUT → CNOT Q0 IN'
@@ -234,7 +214,7 @@ export function KitLab({ lab }: { lab: Lab }) {
           ? `Connect ${head} OUT to the ${head} OUT pin`
           : lab === 'measurement'
             ? measureHint
-            : 'Output complete — chain another gate, or press PROBABILITY GRAPH to measure'
+            : 'Output complete — try the other initial state, or chain another gate'
 
   const chip = !ready || !exp
     ? null
@@ -326,7 +306,6 @@ export function KitLab({ lab }: { lab: Lab }) {
     shotBuffer.current = { exp: expId!, n: (shotBuffer.current?.n ?? 0) + 1 }
     clearTimeout(shotTimer.current)
     shotTimer.current = setTimeout(flushShots, 1500)
-    if (mode === 'bloch') say(`Shot → ${graph!.labels[outcome]} · press PROBABILITY GRAPH to view`)
   }
 
   /** A fresh run of `runShots` shots sampled from the circuit's probabilities, each shot its own random draw. */
@@ -338,7 +317,6 @@ export function KitLab({ lab }: { lab: Lab }) {
     setCounts({ key: countsKey!, counts: measure(graph!.probs, runShots), total: runShots, last: null })
     analytics.trackMeasurement(expId!, runShots)
     setView('measured')
-    if (mode === 'bloch') say(`Measured ${runShots.toLocaleString()} shots · press PROBABILITY GRAPH to view`)
   }
 
   const reset = () => {
@@ -346,7 +324,6 @@ export function KitLab({ lab }: { lab: Lab }) {
     flushShots()
     wiring.reset()
     setCounts(null)
-    setMode(cfg.mode)
     setView('measured')
     analytics.trackReset(expId ?? (lab === 'bloch' ? 'bloch-h' : 'measure-h'))
     say('Reset — cables unplugged and counters cleared')
@@ -357,7 +334,6 @@ export function KitLab({ lab }: { lab: Lab }) {
     setPower(on)
     setBooting(on)
     setCounts(null)
-    setMode(cfg.mode)
     setNotice(null)
   }
 
@@ -379,25 +355,6 @@ export function KitLab({ lab }: { lab: Lab }) {
             <h1 className="hw-title">Quantum Logic and Measurement Emulator</h1>
 
             <div className="hw-top">
-              <div className="hw-modes">
-                <section className="hw-box hw-mode">
-                  <span className="hw-mode-name">
-                    Bloch
-                    <br />
-                    Sphere
-                  </span>
-                  <KitButton label="Bloch Sphere" onPress={() => ready && setMode('bloch')} active={ready && mode === 'bloch'} disabled={!power} />
-                </section>
-                <section className="hw-box hw-mode">
-                  <span className="hw-mode-name">
-                    Probability
-                    <br />
-                    Graph
-                  </span>
-                  <KitButton label="Probability Graph" onPress={() => ready && setMode('graph')} active={ready && mode === 'graph'} disabled={!power} />
-                </section>
-              </div>
-
               <section className="hw-box hw-tft" aria-label="2.8 inch TFT display">
                 <span className="hw-tft-name">2.8&quot; TFT DISPLAY</span>
                 <div className="hw-screen">
@@ -409,7 +366,6 @@ export function KitLab({ lab }: { lab: Lab }) {
                     phase={phase}
                     footer={footer}
                     single={single}
-                    cnot={cnot}
                     graphBlocked={graphBlocked}
                     graph={graph}
                     counts={current}
@@ -501,43 +457,45 @@ export function KitLab({ lab }: { lab: Lab }) {
             </div>
 
             <div className="hw-bottom">
-              <section className="hw-section hw-measure" aria-labelledby="hw-measure-title">
-                <h2 id="hw-measure-title" className="hw-tab t-measure">
-                  MEASUREMENT
-                </h2>
-                <div className="hw-push">
-                  <KitButton label="Shot" onPress={shot} repeat disabled={!power} />
-                  <span className="hw-push-name t-single">SHOT</span>
-                </div>
-                <div className="hw-shots" role="radiogroup" aria-labelledby="hw-shots-title">
-                  <span id="hw-shots-title" className="hw-shots-name">
-                    TOTAL SHOTS
-                  </span>
-                  <div className="hw-shots-set">
-                    {RUN_OPTIONS.map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        role="radio"
-                        aria-checked={runShots === n}
-                        className={runShots === n ? 'is-on' : ''}
-                        disabled={!power}
-                        onClick={() => setRunShots(n)}
-                      >
-                        {n.toLocaleString()}
-                      </button>
-                    ))}
+              {lab === 'measurement' && (
+                <section className="hw-section hw-measure" aria-labelledby="hw-measure-title">
+                  <h2 id="hw-measure-title" className="hw-tab t-measure">
+                    MEASUREMENT
+                  </h2>
+                  <div className="hw-push">
+                    <KitButton label="Shot" onPress={shot} repeat disabled={!power} />
+                    <span className="hw-push-name t-single">SHOT</span>
                   </div>
-                </div>
-                <div className="hw-push">
-                  <KitButton label={`Run ${runShots} shots`} onPress={run} disabled={!power} />
-                  <span className="hw-push-name t-double">RUN</span>
-                </div>
-                <div className="hw-push">
-                  <KitButton label="Reset" onPress={reset} disabled={!power} />
-                  <span className="hw-push-name t-measure">RESET</span>
-                </div>
-              </section>
+                  <div className="hw-shots" role="radiogroup" aria-labelledby="hw-shots-title">
+                    <span id="hw-shots-title" className="hw-shots-name">
+                      TOTAL SHOTS
+                    </span>
+                    <div className="hw-shots-set">
+                      {RUN_OPTIONS.map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          role="radio"
+                          aria-checked={runShots === n}
+                          className={runShots === n ? 'is-on' : ''}
+                          disabled={!power}
+                          onClick={() => setRunShots(n)}
+                        >
+                          {n.toLocaleString()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="hw-push">
+                    <KitButton label={`Run ${runShots} shots`} onPress={run} disabled={!power} />
+                    <span className="hw-push-name t-double">RUN</span>
+                  </div>
+                  <div className="hw-push">
+                    <KitButton label="Reset" onPress={reset} disabled={!power} />
+                    <span className="hw-push-name t-measure">RESET</span>
+                  </div>
+                </section>
+              )}
               <section className="hw-section hw-power" aria-labelledby="hw-power-title">
                 <h2 id="hw-power-title" className="hw-tab t-power">
                   POWER

@@ -24,22 +24,6 @@ export interface SingleScreen {
   revealed: boolean
 }
 
-export interface CnotLine {
-  /** State reaching this CNOT input (after any gates before it), or null while unplugged. */
-  inKet: string | null
-  /** This qubit after the CNOT once its output pin is wired: a named state, or "entangled". */
-  outKet: string | null
-  /** Bloch vector on screen; shorter than 1 when the qubit is entangled with the other one. */
-  vec: Vec3 | null
-}
-
-export interface CnotScreen {
-  lines: [CnotLine, CnotLine]
-  /** The two-qubit output state, e.g. "0.707|00⟩ + 0.707|11⟩", once both outputs are wired. */
-  outState: string | null
-  entangled: boolean
-}
-
 export interface ScreenProps {
   power: boolean
   booting: boolean
@@ -48,7 +32,6 @@ export interface ScreenProps {
   phase: string
   footer: { text: string; tone: 'hint' | 'info' | 'warn' }
   single: SingleScreen | null
-  cnot: CnotScreen | null
   /** Why the graph is unavailable, when it is. */
   graphBlocked: string | null
   graph: { labels: readonly string[]; probs: number[]; accent: 'blue' | 'purple' } | null
@@ -60,7 +43,7 @@ export interface ScreenProps {
   snapKey: number
 }
 
-/** The 2.8″ TFT: boot screen, then Bloch Sphere mode or Probability Graph mode. */
+/** The 2.8″ TFT: boot screen, then the lab's screen — the Bloch sphere (Bloch Sphere Lab) or the probability graph (Measurement Lab). */
 export function KitScreen(p: ScreenProps) {
   if (!p.power) return <div className="tft-off" aria-label="Display off" />
   if (p.booting)
@@ -91,7 +74,7 @@ export function KitScreen(p: ScreenProps) {
   )
 }
 
-function Sphere(props: { vector: Vec3 | null; snapKey: number; compact?: boolean }) {
+function Sphere(props: { vector: Vec3 | null; snapKey: number }) {
   return (
     <Suspense fallback={<div className="tft-sphere-loading" aria-hidden />}>
       <BlochSphere {...props} resetViewKey={0} />
@@ -99,33 +82,7 @@ function Sphere(props: { vector: Vec3 | null; snapKey: number; compact?: boolean
   )
 }
 
-function BlochView({ single, cnot, snapKey }: ScreenProps) {
-  if (cnot) {
-    return (
-      <div className="tft-cnot">
-        {([0, 1] as const).map((line) => {
-          const l = cnot.lines[line]
-          return (
-            <div key={line} className="tft-qubit">
-              <span className="tft-qubit-name">{line === 0 ? 'Q0 · Control' : 'Q1 · Target'}</span>
-              <div className="tft-sphere">
-                <Sphere compact vector={l.vec} snapKey={snapKey} />
-              </div>
-              <span className="tft-qline">
-                IN <b>{l.inKet ?? '—'}</b> → OUT <b className={l.outKet === 'entangled' ? 'ent' : ''}>{l.outKet ?? '—'}</b>
-              </span>
-            </div>
-          )
-        })}
-        {cnot.outState && (
-          <p className="tft-cnot-state">
-            OUT <b>{cnot.outState}</b>
-            {cnot.entangled && <span> · entangled — neither qubit has a state of its own</span>}
-          </p>
-        )}
-      </div>
-    )
-  }
+function BlochView({ single, snapKey }: ScreenProps) {
   return (
     <div className="tft-bloch">
       <div className="tft-sphere">
