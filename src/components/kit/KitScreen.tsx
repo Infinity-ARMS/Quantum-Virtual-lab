@@ -22,6 +22,16 @@ export interface SingleScreen {
   shownVec: Vec3
   outputKet: string | null
   revealed: boolean
+  /** Once revealed: each gate's rotation axis and the Bloch vector after it, for the gate-by-gate animation. */
+  route: { axis: Vec3; to: Vec3 }[] | null
+}
+
+/** The kit's banner over the graph before the first shot, e.g. |0⟩ —H→ |+⟩ or |00⟩ —H+CNOT→ |00⟩+|11⟩. */
+export interface GraphBanner {
+  from: string
+  via: string
+  to: string
+  entangled: boolean
 }
 
 export interface ScreenProps {
@@ -35,6 +45,9 @@ export interface ScreenProps {
   /** Why the graph is unavailable, when it is. */
   graphBlocked: string | null
   graph: { labels: readonly string[]; probs: number[]; accent: 'blue' | 'purple' } | null
+  /** Outcome labels of the empty graph shown until a circuit is complete (|0⟩ |1⟩, or the four CNOT outcomes). */
+  idleLabels: readonly string[]
+  banner: GraphBanner | null
   counts: { counts: number[]; total: number; last: { n: number; outcome: number } | null } | null
   /** Shots per RUN press, shown next to the counts. */
   runShots: number
@@ -74,7 +87,7 @@ export function KitScreen(p: ScreenProps) {
   )
 }
 
-function Sphere(props: { vector: Vec3 | null; snapKey: number }) {
+function Sphere(props: { vector: Vec3 | null; snapKey: number; route?: { axis: Vec3; to: Vec3 }[] | null }) {
   return (
     <Suspense fallback={<div className="tft-sphere-loading" aria-hidden />}>
       <BlochSphere {...props} resetViewKey={0} />
@@ -86,7 +99,7 @@ function BlochView({ single, snapKey }: ScreenProps) {
   return (
     <div className="tft-bloch">
       <div className="tft-sphere">
-        <Sphere vector={single ? single.shownVec : null} snapKey={snapKey} />
+        <Sphere vector={single ? single.shownVec : null} snapKey={snapKey} route={single?.route} />
         {!single && <div className="tft-empty">Connect a gate input</div>}
       </div>
       <dl className="tft-info">
@@ -113,26 +126,45 @@ function BlochView({ single, snapKey }: ScreenProps) {
   )
 }
 
-function GraphViewPane({ graph, graphBlocked, counts, runShots, view, onView }: ScreenProps) {
-  if (!graph) return <div className="tft-graph-empty">{graphBlocked}</div>
+function GraphViewPane({ graph, graphBlocked, idleLabels, banner, counts, runShots, view, onView }: ScreenProps) {
+  // until a circuit is complete the screen still shows its graph: axes, the outcome labels and zero counts
+  const labels = graph ? graph.labels : idleLabels
   const total = counts?.total ?? 0
-  const measured = graph.labels.map((_, i) => (total ? (counts!.counts[i] ?? 0) / total : 0))
-  const values = view === 'ideal' ? graph.probs : measured
+  const measured = labels.map((_, i) => (total ? (counts!.counts[i] ?? 0) / total : 0))
+  const ideal = !!graph && view === 'ideal'
   return (
     <div className="tft-graph">
       <div className="tft-chart">
         <div className="tft-switch" role="group" aria-label="Graph shows">
-          <button type="button" className={view === 'measured' ? 'is-on' : ''} onClick={() => onView('measured')} aria-pressed={view === 'measured'}>
+          <button type="button" className={!ideal ? 'is-on' : ''} onClick={() => onView('measured')} aria-pressed={!ideal} disabled={!graph}>
             Measured
           </button>
-          <button type="button" className={view === 'ideal' ? 'is-on' : ''} onClick={() => onView('ideal')} aria-pressed={view === 'ideal'}>
+          <button type="button" className={ideal ? 'is-on' : ''} onClick={() => onView('ideal')} aria-pressed={ideal} disabled={!graph}>
             Ideal
           </button>
         </div>
-        <ProbabilityGraph labels={graph.labels} theory={values} measured={null} accent={view === 'ideal' ? graph.accent : 'blue'} />
+        <div className="tft-plot">
+          <ProbabilityGraph
+            labels={labels}
+            theory={graph ? (ideal ? graph.probs : measured) : null}
+            measured={null}
+            accent={ideal ? graph.accent : 'blue'}
+          />
+          {graph && !ideal && total === 0 && banner && (
+            <div className="tft-banner" role="status">
+              <p className="tft-banner-eq">
+                <b>{banner.from}</b>
+                <span className="tft-banner-via">{banner.via}</span>
+                <b className="to">{banner.to}</b>
+              </p>
+              <p className="tft-banner-hint">Press SHOT to measure</p>
+              {banner.entangled && <p className="tft-banner-ent">ENTANGLED (Bell state)</p>}
+            </div>
+          )}
+        </div>
       </div>
       <aside className="tft-stats">
-        {view === 'measured' ? (
+        {!ideal ? (
           <>
             <div className="tft-total">
               <span>Total shots</span>
@@ -147,16 +179,20 @@ function GraphViewPane({ graph, graphBlocked, counts, runShots, view, onView }: 
                 </tr>
               </thead>
               <tbody>
-                {graph.labels.map((l, i) => (
+                {labels.map((l, i) => (
                   <tr key={l} className={counts?.last?.outcome === i ? 'last' : ''}>
                     <th scope="row">{l}</th>
                     <td>{(counts?.counts[i] ?? 0).toLocaleString()}</td>
-                    <td>{(measured[i] * 100).toFixed(1)}%</td>
+                    <td>{total ? `${(measured[i] * 100).toFixed(1)}%` : '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {total === 0 && <p className="tft-note">SHOT measures once · RUN takes {runShots.toLocaleString()} shots</p>}
+            {!graph ? (
+              <p className="tft-note">{graphBlocked}</p>
+            ) : (
+              total === 0 && <p className="tft-note">SHOT measures once · RUN takes {runShots.toLocaleString()} shots</p>
+            )}
           </>
         ) : (
           <>
@@ -171,7 +207,7 @@ function GraphViewPane({ graph, graphBlocked, counts, runShots, view, onView }: 
                 </tr>
               </thead>
               <tbody>
-                {graph.labels.map((l, i) => (
+                {labels.map((l, i) => (
                   <tr key={l}>
                     <th scope="row">{l}</th>
                     <td>{(graph.probs[i] * 100).toFixed(1)}%</td>

@@ -1754,6 +1754,12 @@ input[aria-invalid='true'] {
     color: var(--faint);
     text-align: left;
   }
+  /* long emails and IDs wrap inside the card instead of running past its edge */
+  .data-table td,
+  .data-table .cell-stack {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -2064,10 +2070,32 @@ input[aria-invalid='true'] {
   .teacher-link-row {
     flex-direction: column;
   }
+  .teacher-link-row input {
+    flex: none;
+  }
   .feed li {
     grid-template-columns: 10px minmax(0, 1fr);
   }
   .feed time {
     grid-column: 2;
+  }
+}
+
+/* touch screens: larger tap areas for small text controls, without changing what is drawn */
+@media (pointer: coarse) {
+  .home-foot nav a,
+  .feed-who,
+  .link-btn.small {
+    position: relative;
+  }
+  .home-foot nav a::after,
+  .feed-who::after,
+  .link-btn.small::after {
+    content: '';
+    position: absolute;
+    inset: -12px -6px;
+  }
+  .link-btn.small::after {
+    inset: -12px -4px;
   }
 }

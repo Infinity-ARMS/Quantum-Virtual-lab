@@ -54,9 +54,9 @@ const LABS: {
     to: '/student/measurement',
     kicker: 'Lab 02',
     title: 'Measurement Lab',
-    text: 'Measure the H, Z and CNOT gates over many shots — including H → CNOT entanglement — and compare the sampled counts with the ideal probabilities.',
-    tags: ['H gate', 'Z gate', 'CNOT gate'],
-    experiments: ['measure-h', 'measure-z', 'measure-cnot'],
+    text: 'Measure the H, NOT (X) and CNOT gates over many shots — including H → CNOT entanglement — and compare the sampled counts with the ideal probabilities.',
+    tags: ['H gate', 'NOT (X) gate', 'CNOT gate'],
+    experiments: ['measure-h', 'measure-x', 'measure-cnot'],
     art: (
       <svg viewBox="0 0 120 120">
         <line x1="14" y1="100" x2="108" y2="100" className="la-axis" />

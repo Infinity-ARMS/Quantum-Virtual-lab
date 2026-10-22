@@ -120,11 +120,33 @@ export function AppShell({ role }: { role: Role }) {
   const location = useLocation()
   const [drawer, setDrawer] = useState(false)
   const nav = NAV[role]
+  const menuBtn = useRef<HTMLButtonElement>(null)
+  const drawerEl = useRef<HTMLElement>(null)
 
   useEffect(() => {
     setDrawer(false)
     if (role === 'student') analytics.trackPageView(location.pathname)
   }, [location.pathname, role])
+
+  // the open mobile menu closes on a tap outside it or on Escape (focus goes back to the menu button)
+  useEffect(() => {
+    if (!drawer) return
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node
+      if (!drawerEl.current?.contains(t) && !menuBtn.current?.contains(t)) setDrawer(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setDrawer(false)
+      menuBtn.current?.focus()
+    }
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [drawer])
 
   return (
     <div className="shell">
@@ -149,6 +171,7 @@ export function AppShell({ role }: { role: Role }) {
         <div className="shell-right">
           <ProfileMenu role={role} />
           <button
+            ref={menuBtn}
             type="button"
             className="icon-btn menu-btn"
             aria-label={drawer ? 'Close menu' : 'Open menu'}
@@ -170,6 +193,7 @@ export function AppShell({ role }: { role: Role }) {
       <AnimatePresence>
         {drawer && session && (
           <motion.nav
+            ref={drawerEl}
             id="mobile-drawer"
             className="mobile-drawer"
             aria-label="Mobile"

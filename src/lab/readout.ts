@@ -77,3 +77,7 @@ export function graphReadout(g0: VizSignal | null, g1: VizSignal | null): GraphR
   }
   return null
 }
+
+/** Bloch animation timing, as on the kit: one gate turn, and the pause between chained gates. */
+export const GATE_TURN_MS = 1400
+export const GATE_GAP_MS = 300

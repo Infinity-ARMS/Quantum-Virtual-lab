@@ -2,8 +2,11 @@ import { Line, OrbitControls } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
+import { GATE_GAP_MS, GATE_TURN_MS } from '../lab/readout'
 
 type Vec3 = [number, number, number]
+/** One gate of a chain: its rotation axis (Bloch coordinates) and the Bloch vector after it. */
+type RouteStep = { axis: Vec3; to: Vec3 }
 
 /** Physics Bloch (x, y, z) → three.js world. Z is up, X points toward the viewer, Y to the right (right-handed). */
 const toWorld = ([x, y, z]: Vec3) => new THREE.Vector3(y, z, x)
@@ -145,6 +148,15 @@ interface Anim {
   len1: number
   t: number
   dur: number
+  /** Exact end direction (avoids rounding drift over a chain of turns). */
+  to?: THREE.Vector3
+}
+
+/** Gate-by-gate turns still to play (world coordinates), with the pause before the next one. */
+interface Plan {
+  steps: { axis: THREE.Vector3; to: THREE.Vector3 }[]
+  i: number
+  wait: number
 }
 
 /**
@@ -152,8 +164,23 @@ interface Anim {
  * it appears at the input basis state (`start`) and rotates along the great circle to the result, with length
  * (purity) interpolated, so transitions never teleport. With no signal nothing is drawn but the origin.
  */
-function StateVector({ target, start, snapKey, p }: { target: Vec3 | null; start: Vec3 | null; snapKey: number; p: Palette }) {
+function StateVector({
+  target,
+  start,
+  route,
+  snapKey,
+  p,
+}: {
+  target: Vec3 | null
+  start: Vec3 | null
+  route: RouteStep[] | null
+  snapKey: number
+  p: Palette
+}) {
   const live = target !== null
+  const plan = useRef<Plan | null>(null)
+  const routeRef = useRef(route)
+  routeRef.current = route
   const shown = useRef(false)
   const dir = useRef(new THREE.Vector3(0, 1, 0))
   const len = useRef(1)
@@ -196,6 +223,7 @@ function StateVector({ target, start, snapKey, p }: { target: Vec3 | null; start
 
   const key = target ? target.map((v) => v.toFixed(4)).join(',') : 'none'
   useEffect(() => {
+    plan.current = null
     if (!target) {
       // signal removed: take the vector away rather than leaving a stale arrow
       shown.current = false
@@ -209,6 +237,14 @@ function StateVector({ target, start, snapKey, p }: { target: Vec3 | null; start
       dir.current = toWorld(s).normalize()
       len.current = Math.min(1, Math.hypot(...s))
       shown.current = true
+    }
+    // a revealed gate chain: turn 180° about each gate's own axis in turn, as the kit firmware animates it
+    const steps = routeRef.current
+    const end = steps?.[steps.length - 1]?.to
+    if (steps && steps.length && end && end.every((v, i) => Math.abs(v - target[i]) < 1e-3)) {
+      plan.current = { steps: steps.map((st) => ({ axis: toWorld(st.axis).normalize(), to: toWorld(st.to).normalize() })), i: 0, wait: 0 }
+      anim.current = null
+      return
     }
     const newLen = Math.min(1, Math.hypot(...target))
     const to = newLen > 1e-6 ? toWorld(target).normalize() : dir.current.clone()
@@ -237,6 +273,7 @@ function StateVector({ target, start, snapKey, p }: { target: Vec3 | null; start
       len.current = Math.min(1, Math.hypot(...target))
     }
     anim.current = null
+    plan.current = null
     trailFade.current = 0
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapKey])
@@ -244,6 +281,22 @@ function StateVector({ target, start, snapKey, p }: { target: Vec3 | null; start
   useFrame((_, dt) => {
     if (rig.current) rig.current.visible = shown.current
     if (!shown.current) return
+    const pl = plan.current
+    if (pl && !anim.current) {
+      if (pl.wait > 0) pl.wait -= Math.min(dt, 0.25)
+      else {
+        const st = pl.steps[pl.i]
+        const from = dir.current.clone()
+        // a state on the gate's axis does not move (e.g. Z on |0⟩): the phase ring shows the turn instead
+        const still = Math.abs(from.dot(st.axis)) > 0.98
+        anim.current = { from, axis: st.axis.clone(), angle: still ? 0 : Math.PI, len0: len.current, len1: 1, t: 0, dur: GATE_TURN_MS / 1000, to: st.to }
+        if (still) pulse.current = 1
+        trailFade.current = still ? 0 : 1
+        pl.i++
+        pl.wait = GATE_GAP_MS / 1000
+        if (pl.i >= pl.steps.length) plan.current = null
+      }
+    }
     const a = anim.current
     if (a) {
       // real time even on slow (software-rendered) PCs; only a long stall is capped so the move is never skipped
@@ -260,7 +313,10 @@ function StateVector({ target, start, snapKey, p }: { target: Vec3 | null; start
         pos.setXYZ(i, q.x, q.y, q.z)
       }
       pos.needsUpdate = true
-      if (a.t >= 1) anim.current = null
+      if (a.t >= 1) {
+        if (a.to) dir.current.copy(a.to)
+        anim.current = null
+      }
     } else if (trailFade.current > 0) {
       trailFade.current = Math.max(0, trailFade.current - dt * 0.8)
     }
@@ -361,12 +417,14 @@ interface Props {
   vector: Vec3 | null
   /** Bloch vector of the input basis state the arrow should appear at before animating. */
   start?: Vec3 | null
+  /** When the vector becomes the end of this route, the arrow turns through each gate instead of moving directly. */
+  route?: RouteStep[] | null
   snapKey: number
   resetViewKey: number
   compact?: boolean
 }
 
-export function BlochSphere({ vector, start = null, snapKey, resetViewKey, compact = false }: Props) {
+export function BlochSphere({ vector, start = null, route = null, snapKey, resetViewKey, compact = false }: Props) {
   const labelEls = useRef<(HTMLSpanElement | null)[]>([])
   const p = P
   const home = useMemo(() => HOME.clone().multiplyScalar(compact ? 1.12 : 1), [compact])
@@ -380,7 +438,7 @@ export function BlochSphere({ vector, start = null, snapKey, resetViewKey, compa
         <Axis to={X_AXIS} color={p.axis.x} />
         <Axis to={Y_AXIS} color={p.axis.y} />
         <Axis to={Z_AXIS} color={p.axis.z} />
-        <StateVector target={vector} start={start} snapKey={snapKey} p={p} />
+        <StateVector target={vector} start={start} route={route} snapKey={snapKey} p={p} />
         <OrbitControls
           makeDefault
           enableDamping

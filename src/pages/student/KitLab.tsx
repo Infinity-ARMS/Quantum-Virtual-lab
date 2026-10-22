@@ -3,7 +3,7 @@ import { analytics } from '../../analytics/analyticsService'
 import { EXPERIMENTS, type ExperimentId } from '../../analytics/types'
 import { useExperimentRun } from '../../analytics/useExperimentRun'
 import { KitButton, PowerSwitch } from '../../components/kit/KitControls'
-import { KitScreen, type GraphView, type ScreenMode, type SingleScreen } from '../../components/kit/KitScreen'
+import { KitScreen, type GraphBanner, type GraphView, type ScreenMode, type SingleScreen } from '../../components/kit/KitScreen'
 import { LabToast } from '../../components/lab/LabChrome'
 import { WireLayer } from '../../components/QuantumWire'
 import { Socket } from '../../components/Socket'
@@ -18,12 +18,12 @@ import {
   type SingleSignal,
 } from '../../lab/circuit'
 import { LabContext } from '../../lab/LabContext'
-import { SINGLE_LABELS } from '../../lab/readout'
+import { GATE_GAP_MS, GATE_TURN_MS, SINGLE_LABELS } from '../../lab/readout'
 import { useLabWiring } from '../../lab/useLabWiring'
 import { useOutputReveal } from '../../lab/useOutputReveal'
 import type { GateName } from '../../quantum/gates'
 import { measure } from '../../quantum/measurement'
-import { basis, blochVector, probabilities, stateName, type Qubit } from '../../quantum/singleQubit'
+import { basis, blochVector, gateRoute, probabilities, stateName, type Qubit } from '../../quantum/singleQubit'
 import { probabilities2, TWO_QUBIT_LABELS } from '../../quantum/twoQubit'
 import { CompletionDialog, type Completion } from './CompletionDialog'
 
@@ -33,7 +33,15 @@ type Bit = 0 | 1
 /** Each lab is the same kit panel with only that lab's gates mounted; its screen shows that lab's view. */
 const LABS: Record<
   Lab,
-  { gates: GateName[]; cnot: boolean; mode: ScreenMode; storage: string; pins: { id: string; label: string }[] }
+  {
+    gates: GateName[]
+    /** Gate names printed on the panel where they differ from the gate letter. */
+    names?: Partial<Record<GateName, string>>
+    cnot: boolean
+    mode: ScreenMode
+    storage: string
+    pins: { id: string; label: string }[]
+  }
 > = {
   bloch: {
     gates: ['X', 'H', 'Z'],
@@ -46,14 +54,16 @@ const LABS: Record<
       { id: 'pin.Z', label: 'Z OUT' },
     ],
   },
+  // as in the kit firmware: the probability graph is for H, NOT (X) and CNOT circuits
   measurement: {
-    gates: ['H', 'Z'],
+    gates: ['X', 'H'],
+    names: { X: 'NOT (X)' },
     cnot: true,
     mode: 'graph',
-    storage: 'qlab-kit-measurement',
+    storage: 'qlab-kit-measurement-v2',
     pins: [
+      { id: 'pin.X', label: 'X OUT' },
       { id: 'pin.H', label: 'H OUT' },
-      { id: 'pin.Z', label: 'Z OUT' },
       { id: 'pin.q0', label: 'CNOT Q0 OUT' },
       { id: 'pin.q1', label: 'CNOT Q1 OUT' },
     ],
@@ -62,6 +72,7 @@ const LABS: Record<
 
 const BOOT_MS = 1200
 const SHOTS_TO_COMPLETE = 10
+const MAX_SHOTS = 99_999
 const RUN_OPTIONS = [100, 500, 1000] as const
 const ket = (b: Bit) => `|${b}⟩`
 const EXP_TITLE = Object.fromEntries(EXPERIMENTS.map((e) => [e.id, e.title])) as Record<ExperimentId, string>
@@ -80,7 +91,7 @@ const pathOf = (s: SingleSignal) => [ket(s.source), ...s.gates].join(' → ')
 /** The experiment a lab records for what is wired. */
 function experimentId(lab: Lab, e: Experiment): ExperimentId {
   if (lab === 'bloch') return `bloch-${e.toLowerCase()}` as ExperimentId
-  return e === 'CNOT' ? 'measure-cnot' : e === 'Z' ? 'measure-z' : 'measure-h'
+  return e === 'CNOT' ? 'measure-cnot' : e === 'X' ? 'measure-x' : 'measure-h'
 }
 
 /** Which experiment a new cable belongs to, for activity records. */
@@ -159,6 +170,8 @@ export function KitLab({ lab }: { lab: Lab }) {
             shownVec: blochVector(state),
             outputKet: ketOf(single$.state),
             revealed,
+            // once the output is wired the arrow turns through each gate in turn, as on the kit
+            route: revealed ? gateRoute(single$.source, single$.gates) : null,
           }
         })()
       : null
@@ -171,6 +184,29 @@ export function KitLab({ lab }: { lab: Lab }) {
       : null
   const countsKey = graph ? (single?.revealed ? singleKey : cnotKey) : null
   const current = counts && counts.key === countsKey ? counts : null
+
+  // the kit's graph banner before the first shot: initial state → gates → expected result(s)
+  const banner: GraphBanner | null = !graph
+    ? null
+    : single$ && single?.revealed
+      ? { from: ket(single$.source), via: single$.gates.join('-'), to: ketOf(single$.state), entangled: false }
+      : dbl
+        ? (() => {
+            const [l0, l1] = dbl.lines
+            const g0 = l0.gates.join('-')
+            const g1 = l1.gates.join('-')
+            const via = g0 && g1 ? `Q0:${g0} Q1:${g1}+CNOT` : g0 ? `${g0}+CNOT` : g1 ? `Q1:${g1}+CNOT` : 'CNOT'
+            const p = graph.probs
+            const sure = p.findIndex((x) => x > 0.999)
+            const possible = TWO_QUBIT_LABELS.filter((_, i) => p[i] > 0.001)
+            return {
+              from: `|${l0.source}${l1.source}⟩`,
+              via,
+              to: sure >= 0 ? TWO_QUBIT_LABELS[sure] : possible.length <= 2 ? possible.join('+') : 'all four',
+              entangled: (p[0] > 0.49 && p[3] > 0.49) || (p[1] > 0.49 && p[2] > 0.49),
+            }
+          })()
+        : null
 
   const firstEmpty = head ? missingInput(conns, head) : null
   const graphBlocked = !exp
@@ -250,8 +286,10 @@ export function KitLab({ lab }: { lab: Lab }) {
   }, [expId])
 
   // the completion summary, once per completed run (on the Bloch lab after the arrow has moved)
-  const summary = useRef({ resultText, circuitText, total: current?.total ?? 0 })
-  summary.current = { resultText, circuitText, total: current?.total ?? 0 }
+  // on the Bloch lab the summary waits until the arrow has turned through every gate
+  const turnMs = single$ ? single$.gates.length * GATE_TURN_MS + (single$.gates.length - 1) * GATE_GAP_MS : 0
+  const summary = useRef({ resultText, circuitText, total: current?.total ?? 0, turnMs })
+  summary.current = { resultText, circuitText, total: current?.total ?? 0, turnMs }
   useEffect(() => {
     if (!completedAt || !expId) return
     const t = setTimeout(
@@ -266,7 +304,7 @@ export function KitLab({ lab }: { lab: Lab }) {
           saved: analytics.flush(),
         })
       },
-      lab === 'bloch' ? 1600 : 300,
+      lab === 'bloch' ? summary.current.turnMs + 700 : 300,
     )
     return () => clearTimeout(t)
   }, [completedAt, expId, lab])
@@ -295,6 +333,7 @@ export function KitLab({ lab }: { lab: Lab }) {
     if (!ready) return
     const why = cannotMeasure()
     if (why) return say(why, 'warn')
+    if ((current?.total ?? 0) >= MAX_SHOTS) return say(`Maximum ${MAX_SHOTS.toLocaleString()} shots — press RESET to start again`, 'warn')
     const outcome = measure(graph!.probs, 1).indexOf(1)
     const key = countsKey!
     setCounts((prev) =>
@@ -367,6 +406,8 @@ export function KitLab({ lab }: { lab: Lab }) {
                     footer={footer}
                     single={single}
                     graphBlocked={graphBlocked}
+                    idleLabels={cnotOn ? TWO_QUBIT_LABELS : SINGLE_LABELS}
+                    banner={banner}
                     graph={graph}
                     counts={current}
                     runShots={runShots}
@@ -407,7 +448,7 @@ export function KitLab({ lab }: { lab: Lab }) {
                 <div className="hw-gates">
                   {cfg.gates.map((g) => (
                     <div key={g} className={`hw-gate g-${g.toLowerCase()} ${inUse(g) ? 'is-active' : ''}`}>
-                      <span className="hw-gate-tab">{g} GATE</span>
+                      <span className="hw-gate-tab">{cfg.names?.[g] ?? g} GATE</span>
                       <Socket id={`s.${g}.in`} size="lg" label={<span className="hw-txt">IN</span>} />
                       <span className="hw-badge">{g}</span>
                       <Socket id={`s.${g}.out`} size="lg" labelSide="left" label={<span className="hw-txt">OUT</span>} />

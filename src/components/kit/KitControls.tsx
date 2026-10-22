@@ -10,6 +10,10 @@ interface ButtonProps {
   active?: boolean
 }
 
+/** Held SHOT keeps firing, with the kit firmware's timing. */
+const REPEAT_DELAY_MS = 600
+const REPEAT_EVERY_MS = 120
+
 /** Round black push button, as on the kit. */
 export function KitButton({ label, onPress, repeat = false, disabled = false, active = false }: ButtonProps) {
   const press = useRef(onPress)
@@ -34,8 +38,8 @@ export function KitButton({ label, onPress, repeat = false, disabled = false, ac
               if (disabled || e.button !== 0) return
               press.current()
               timers.current.wait = setTimeout(() => {
-                timers.current.every = setInterval(() => press.current(), 90)
-              }, 450)
+                timers.current.every = setInterval(() => press.current(), REPEAT_EVERY_MS)
+              }, REPEAT_DELAY_MS)
             }
           : undefined
       }

@@ -128,9 +128,50 @@ function upstream(conns: Connection[], gate: GateName): GateName[] {
   return out
 }
 
-/** Every experiment wired on the kit: the end gate of each chain that has a cable in an input. */
+/** The initial-state jack at the start of the chain that reaches `gate`'s input, or null while it has none. */
+function rootOf(conns: Connection[], gate: GateName): string | null {
+  let g: GateName | null = gate
+  for (let i = 0; i < 8 && g; i++) {
+    const c = conns.find((x) => x.to === `s.${g}.in`)
+    if (!c) return null
+    if (SOCKETS[c.from].kind === 'source') return c.from
+    g = c.from.startsWith('s.') ? (c.from.split('.')[1] as GateName) : null
+  }
+  return null
+}
+
+/** The DOUBLE QUBIT initial states (Q0 / Q1 |0⟩, |1⟩). */
+const isQubitState = (socket: string | null) => !!socket && socket.startsWith('d.q')
+
+/**
+ * The experiment a gate input belongs to. As in the kit firmware, a chain that starts at a DOUBLE QUBIT state is
+ * part of the CNOT experiment (Q0/Q1 → [X/H/Z] → CNOT), whatever gates it passes through.
+ */
+function experimentOfInput(conns: Connection[], input: string): Experiment {
+  const g = gateOf(input)!
+  if (g === 'CNOT') return 'CNOT'
+  return isQubitState(rootOf(conns, g)) ? 'CNOT' : headOf(conns, g)
+}
+
+/** Every experiment wired on the kit: the end gate of each chain that has a cable in an input, or CNOT. */
 function experiments(conns: Connection[]): Set<Experiment> {
-  return new Set(conns.filter((c) => isGateInput(c.to)).map((c) => headOf(conns, gateOf(c.to)!)))
+  return new Set(conns.filter((c) => isGateInput(c.to)).map((c) => experimentOfInput(conns, c.to)))
+}
+
+/** Firmware wiring rules that depend on the whole chain; returns why the circuit is invalid, or null. */
+function chainError(conns: Connection[]): string | null {
+  for (const c of conns) {
+    const g = c.from.startsWith('s.') && SOCKETS[c.from].kind === 'out' ? (c.from.split('.')[1] as GateName) : null
+    if (!g) continue
+    const root = rootOf(conns, g)
+    // each CNOT qubit path must end in its own CNOT input
+    if (c.to === 'd.cnot.tin' && root?.startsWith('d.q0.')) return 'A Q0 path must end in CNOT Q0 IN'
+    if (c.to === 'd.cnot.cin' && root?.startsWith('d.q1.')) return 'A Q1 path must end in CNOT Q1 IN'
+    // a Q0/Q1 state is a CNOT qubit: its gates lead into the CNOT, not to a single-qubit output pin
+    if (c.to.startsWith('pin.') && isQubitState(root))
+      return `This path starts at a ${root!.startsWith('d.q0') ? 'Q0' : 'Q1'} state — wire ${g} OUT into CNOT ${root!.startsWith('d.q0') ? 'Q0' : 'Q1'} IN`
+  }
+  return null
 }
 
 /** The experiment on the kit (one at a time): the gate at the end of the wired chain, or CNOT. */
@@ -187,12 +228,16 @@ export function tryConnect(conns: Connection[], a: string, b: string): ConnectRe
   // a consumer holds exactly one plug — replace any existing cable
   let next = conns.filter((c) => c.to !== to)
   let note = ''
-  // a qubit cannot be copied: a gate OUT goes to one place, so moving it unplugs the old cable
-  if (F.kind === 'out') {
+  // a qubit cannot be copied: a gate OUT goes to one place, and (as on the kit) an initial state feeds only one
+  // gate IN — moving the cable unplugs the old one
+  if (F.kind === 'out' || (F.kind === 'source' && T.kind === 'in')) {
     const old = next.find((c) => c.from === from)
     if (old) {
       next = next.filter((c) => c !== old)
-      note = ` (${F.label} unplugged from ${SOCKETS[old.to].label} — a qubit can only go one way)`
+      note =
+        F.kind === 'out'
+          ? ` (${F.label} unplugged from ${SOCKETS[old.to].label} — a qubit can only go one way)`
+          : ` (${F.label} unplugged from ${SOCKETS[old.to].label} — an initial state feeds one gate IN)`
     }
   }
 
@@ -211,14 +256,17 @@ export function tryConnect(conns: Connection[], a: string, b: string): ConnectRe
   }
   next = [...next, makeConn(from, to)]
 
+  const invalid = chainError(next)
+  if (invalid) return { ok: false, msg: invalid }
+
   // one experiment at a time, as on the kit: another experiment's input must be unplugged first
   if (experiments(next).size > 1) {
     const g = gateOf(T.kind === 'in' ? to : from)
-    const mine = g && headOf(next, g)
-    const other = conns.find((c) => isGateInput(c.to) && headOf(next, gateOf(c.to)!) !== mine)
+    const mine = g && (T.kind === 'in' ? experimentOfInput(next, to) : headOf(next, g))
+    const other = conns.find((c) => isGateInput(c.to) && experimentOfInput(next, c.to) !== mine)
     // building H → CNOT in the other order: the H OUT cable has to go in before the H IN cable
     const hint =
-      T.kind === 'in' && mine !== 'CNOT' && other && headOf(next, gateOf(other.to)!) === 'CNOT'
+      T.kind === 'in' && mine !== 'CNOT' && other && experimentOfInput(next, other.to) === 'CNOT'
         ? ` (to use ${g} with the CNOT, wire ${g} OUT to a CNOT input first)`
         : ''
     return {

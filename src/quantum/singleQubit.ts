@@ -57,3 +57,30 @@ export function nameFromBloch([x, y, z]: [number, number, number]): string | nul
   if (near(y, -1)) return '|−i⟩'
   return null
 }
+
+type Vec3 = [number, number, number]
+
+/** Every gate on the kit is a 180° rotation of the Bloch vector about its own axis (as the firmware animates it). */
+export const GATE_AXIS: Record<GateName, Vec3> = {
+  X: [1, 0, 0],
+  H: [Math.SQRT1_2, 0, Math.SQRT1_2],
+  Z: [0, 0, 1],
+}
+
+/** Rodrigues rotation of a Bloch vector `v` about the unit axis `k` by `angle` (right-handed). */
+export function rotateBloch(v: Vec3, k: Vec3, angle: number): Vec3 {
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  const kd = k[0] * v[0] + k[1] * v[1] + k[2] * v[2]
+  const kx: Vec3 = [k[1] * v[2] - k[2] * v[1], k[2] * v[0] - k[0] * v[2], k[0] * v[1] - k[1] * v[0]]
+  return [0, 1, 2].map((i) => v[i] * c + kx[i] * s + k[i] * kd * (1 - c)) as Vec3
+}
+
+/** The arrow's route through a chain of gates: each gate's rotation axis and the Bloch vector after it. */
+export function gateRoute(source: 0 | 1, gates: GateName[]): { gate: GateName; axis: Vec3; to: Vec3 }[] {
+  let q = basis(source)
+  return gates.map((gate) => {
+    q = applyGate(gate, q)
+    return { gate, axis: GATE_AXIS[gate], to: blochVector(q) }
+  })
+}

@@ -1,13 +1,16 @@
-export type ExperimentId = 'bloch-h' | 'bloch-x' | 'bloch-z' | 'measure-h' | 'measure-z' | 'measure-cnot'
+export type ExperimentId = 'bloch-h' | 'bloch-x' | 'bloch-z' | 'measure-h' | 'measure-x' | 'measure-cnot'
 
 export const EXPERIMENTS: { id: ExperimentId; group: 'Bloch Sphere' | 'Measurement'; gate: string; title: string }[] = [
   { id: 'bloch-h', group: 'Bloch Sphere', gate: 'H', title: 'Bloch Sphere · Hadamard' },
   { id: 'bloch-x', group: 'Bloch Sphere', gate: 'X', title: 'Bloch Sphere · Pauli-X' },
   { id: 'bloch-z', group: 'Bloch Sphere', gate: 'Z', title: 'Bloch Sphere · Pauli-Z' },
   { id: 'measure-h', group: 'Measurement', gate: 'H', title: 'Measurement · Hadamard' },
-  { id: 'measure-z', group: 'Measurement', gate: 'Z', title: 'Measurement · Pauli-Z' },
+  { id: 'measure-x', group: 'Measurement', gate: 'X', title: 'Measurement · NOT (Pauli-X)' },
   { id: 'measure-cnot', group: 'Measurement', gate: 'CNOT', title: 'Measurement · CNOT' },
 ]
+
+/** Experiments that were replaced but can still appear in older records (shown by name, not counted). */
+export const RETIRED_EXPERIMENTS: Record<string, string> = { 'measure-z': 'Measurement · Pauli-Z' }
 
 export const EVENT_TYPES = [
   'login',

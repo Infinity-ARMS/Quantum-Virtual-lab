@@ -22,10 +22,13 @@ export function activityStatus(lastActive: number | null, now = Date.now()): Act
 const runDuration = (r: RunRecord) => Math.max(0, r.lastSeenAt - r.startedAt)
 const sessionDuration = (s: SessionRecord) => Math.max(0, (s.endedAt ?? s.lastSeenAt) - s.startedAt)
 
+const CURRENT = new Set<string>(EXPERIMENTS.map((e) => e.id))
+
 export function summarize(userId: string, snap: Snapshot): StudentSummary {
   const events = snap.events.filter((e) => e.userId === userId)
   const sessions = snap.sessions.filter((s) => s.userId === userId)
-  const runs = snap.runs.filter((r) => r.userId === userId)
+  // progress counts the current experiments only (older records of a replaced experiment stay in the history)
+  const runs = snap.runs.filter((r) => r.userId === userId && CURRENT.has(r.experiment))
   const stamps = [...events.map((e) => e.at), ...sessions.map((s) => s.endedAt ?? s.lastSeenAt)]
   const lastActive = stamps.length ? Math.max(...stamps) : null
   // each experiment counts once, however many times it was opened (each opening is its own run)

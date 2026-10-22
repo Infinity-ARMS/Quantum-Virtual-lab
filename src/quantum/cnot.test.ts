@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { makeConn, resolveDouble, tryConnect, vizSignal, type Connection } from '../lab/circuit'
+import { activeExperiment, makeConn, resolveDouble, tryConnect, vizSignal, type Connection } from '../lab/circuit'
 import { graphReadout } from '../lab/readout'
 import { addShots, measure } from './measurement'
-import { applyGate, basis, probabilities } from './singleQubit'
+import type { GateName } from './gates'
+import { applyGate, basis, blochVector, GATE_AXIS, gateRoute, probabilities, rotateBloch } from './singleQubit'
 import { applyCNOT, kron, probabilities2, TWO_QUBIT_LABELS } from './twoQubit'
 
 const close = (a: number[], b: number[]) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i], 12))
@@ -164,5 +165,79 @@ describe('Pauli-Z measurement: Z changes the phase, not the computational-basis 
     close(p, [0.5, 0.5])
     const runs = new Set(Array.from({ length: 8 }, () => measure(p, 1000).join(',')))
     expect(runs.size).toBeGreaterThan(1)
+  })
+})
+
+describe('kit firmware CNOT table (Q0 = control, Q1 = target)', () => {
+  const probsOf = (conns: Connection[]) => probabilities2(resolveDouble(conns)!.state)
+
+  it('0 → H → control with target |1⟩ gives |01⟩ 50 % / |10⟩ 50 %', () => {
+    close(probsOf(wire(['d.q0.src0', 's.H.in'], ['s.H.out', 'd.cnot.cin'], ['d.q1.src1', 'd.cnot.tin'])), [0, 0.5, 0.5, 0])
+  })
+
+  it('target through the NOT (X) gate gives the same as target |1⟩', () => {
+    close(
+      probsOf(wire(['d.q0.src0', 's.H.in'], ['s.H.out', 'd.cnot.cin'], ['d.q1.src0', 's.X.in'], ['s.X.out', 'd.cnot.tin'])),
+      [0, 0.5, 0.5, 0],
+    )
+  })
+
+  it('the state before H may be Q0 |0⟩ or the single-qubit |0⟩: both give the Bell state', () => {
+    close(probsOf(wire(['d.q0.src0', 's.H.in'], ['s.H.out', 'd.cnot.cin'], ['d.q1.src0', 'd.cnot.tin'])), [0.5, 0, 0, 0.5])
+    close(probsOf(wire(['s.src0', 's.H.in'], ['s.H.out', 'd.cnot.cin'], ['d.q1.src0', 'd.cnot.tin'])), [0.5, 0, 0, 0.5])
+  })
+
+  it('NOT on the control flips which target the CNOT acts on: |0⟩ → X → control, target |0⟩ gives |11⟩', () => {
+    close(probsOf(wire(['d.q0.src0', 's.X.in'], ['s.X.out', 'd.cnot.cin'], ['d.q1.src0', 'd.cnot.tin'])), [0, 0, 0, 1])
+  })
+})
+
+describe('kit firmware wiring rules', () => {
+  it('a path from a Q0 state must end in CNOT Q0 IN (and Q1 in Q1 IN)', () => {
+    const q0 = wire(['d.q0.src0', 's.H.in'])
+    const r = tryConnect(q0, 's.H.out', 'd.cnot.tin')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.msg).toMatch(/Q0 path must end in CNOT Q0 IN/)
+    const q1 = wire(['d.q1.src1', 's.X.in'])
+    expect(tryConnect(q1, 's.X.out', 'd.cnot.cin').ok).toBe(false)
+  })
+
+  it('a Q0/Q1 state belongs to the CNOT experiment, even before it reaches the CNOT', () => {
+    expect(activeExperiment(wire(['d.q0.src0', 's.H.in']))).toBe('CNOT')
+    const r = tryConnect(wire(['d.q0.src0', 's.H.in']), 's.H.out', 'pin.H')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.msg).toMatch(/starts at a Q0 state/)
+  })
+
+  it('an initial state feeds only one gate IN: plugging it elsewhere moves the cable', () => {
+    const r = tryConnect(wire(['s.src0', 's.H.in']), 's.src0', 's.X.in')
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.msg).toMatch(/feeds one gate IN/)
+    expect(r.conns.filter((c) => c.from === 's.src0').map((c) => c.to)).toEqual(['s.X.in'])
+  })
+})
+
+describe('Bloch arrow route: each gate turns the arrow 180° about its own axis', () => {
+  const gatesList: GateName[][] = []
+  const all: GateName[] = ['X', 'H', 'Z']
+  for (const a of all) {
+    gatesList.push([a])
+    for (const b of all.filter((x) => x !== a)) {
+      gatesList.push([a, b])
+      for (const c of all.filter((x) => x !== a && x !== b)) gatesList.push([a, b, c])
+    }
+  }
+  it.each(gatesList.flatMap((g) => [[0, g] as const, [1, g] as const]))('|%i⟩ through %j', (source, gates) => {
+    let v = blochVector(basis(source))
+    for (const step of gateRoute(source, gates)) {
+      v = rotateBloch(v, step.axis, Math.PI)
+      step.to.forEach((x, i) => expect(v[i]).toBeCloseTo(x, 9))
+    }
+  })
+
+  it('H takes |0⟩ to |+⟩ through the upper-front quarter (out of the X–Z plane), not straight across', () => {
+    const mid = rotateBloch([0, 0, 1], GATE_AXIS.H, Math.PI / 2)
+    expect(Math.abs(mid[1])).toBeCloseTo(Math.SQRT1_2, 9)
   })
 })

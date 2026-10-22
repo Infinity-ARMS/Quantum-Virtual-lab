@@ -1,7 +1,10 @@
-import { EXPERIMENTS, type ActivityStatus, type AnalyticsEvent, type ExperimentId } from '../../analytics/types'
+import { EXPERIMENTS, RETIRED_EXPERIMENTS, type ActivityStatus, type AnalyticsEvent, type ExperimentId } from '../../analytics/types'
 import { fmtDuration } from '../../app/format'
 
-export const EXP_NAME = Object.fromEntries(EXPERIMENTS.map((e) => [e.id, e.title])) as Record<ExperimentId, string>
+export const EXP_NAME = Object.fromEntries([...Object.entries(RETIRED_EXPERIMENTS), ...EXPERIMENTS.map((e) => [e.id, e.title])]) as Record<
+  ExperimentId,
+  string
+>
 
 export const STATUS_LABEL: Record<ActivityStatus, string> = {
   active: 'Active',
