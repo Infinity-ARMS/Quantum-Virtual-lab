@@ -212,8 +212,13 @@ export async function resolveTeacherCode(
   return { ok: true, teacher }
 }
 
-export const linkStudentToTeacher = (db: DB, studentId: string, teacherId: string) =>
-  db.run(`UPDATE users SET teacher_id = ?, teacher_linked_at = ? WHERE id = ? AND role = 'user'`, [teacherId, Date.now(), studentId])
+/** Set (or, with null, clear) a student's teacher. */
+export const linkStudentToTeacher = (db: DB, studentId: string, teacherId: string | null) =>
+  db.run(`UPDATE users SET teacher_id = ?, teacher_linked_at = ? WHERE id = ? AND role = 'user'`, [
+    teacherId,
+    teacherId ? Date.now() : null,
+    studentId,
+  ])
 
 /** The students linked to one teacher: the only students that teacher may see. */
 export const listStudentsOfTeacher = (db: DB, teacherId: string) =>

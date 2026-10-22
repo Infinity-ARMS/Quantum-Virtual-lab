@@ -1963,6 +1963,16 @@ input[aria-invalid='true'] {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.feed-who {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+}
+.feed-who:hover,
+.feed-who:focus-visible {
+  color: var(--blue);
+  text-decoration: underline;
+}
 .feed time {
   white-space: nowrap;
 }
@@ -1999,18 +2009,11 @@ input[aria-invalid='true'] {
   padding-top: 16px;
   border-top: 1px solid var(--line);
 }
-.teacher-link-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
 .teacher-link h2 {
   margin: 0 0 4px;
   font-size: 15px;
 }
-.teacher-link-head p {
+.teacher-link > p {
   margin: 0;
   font-size: 14px;
 }
@@ -2031,19 +2034,15 @@ input[aria-invalid='true'] {
   font-family: var(--sans);
   text-transform: none;
 }
-.link-nudge {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 16px;
+.enroll-card {
   margin: 0 0 16px;
-  padding: 12px 16px;
-  border: 1px solid var(--blue-line);
-  border-radius: 12px;
+  padding: 2px 18px 16px;
+  border-color: var(--blue-line);
   background: var(--blue-soft);
-  color: var(--ink-2);
-  font-size: 14px;
+}
+.enroll-card .teacher-link {
+  margin-top: 0;
+  border-top: 0;
 }
 
 @media (max-width: 1180px) {

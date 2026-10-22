@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { ApiError } from '../../api/client'
 import { fmtDateTime, fmtRelative } from '../../app/format'
 import { useAuth } from '../../auth/AuthContext'
-import { changeRole, changeTeacherCode, loadAccounts, useLiveData, type Account } from './useAdminData'
+import { assignTeacher, changeRole, changeTeacherCode, loadAccounts, useLiveData, type Account } from './useAdminData'
 
 const ROLE_LABEL: Record<Account['role'], string> = { user: 'Student', teacher: 'Teacher', admin: 'Admin' }
 const AS_ROLE: Record<Account['role'], string> = { user: 'a student', teacher: 'a teacher', admin: 'an admin' }
@@ -29,6 +29,27 @@ export default function AdminUsers() {
   }, [data, query, filter])
 
   const count = (role: Account['role']) => (data ?? []).filter((u) => u.role === role).length
+  const teachers = (data ?? []).filter((u) => u.role === 'teacher' && u.status === 'enrolled')
+
+  /** The only way to change a linked student's teacher; their experiment records stay on their account. */
+  const reassign = async (u: Account, teacherId: string | null) => {
+    const to = teachers.find((t) => t.id === teacherId)
+    const question = to
+      ? `Assign ${u.name} to ${to.name}? ${to.name} will see all of ${u.name}'s experiment records.`
+      : `Unlink ${u.name} from ${u.teacherName ?? 'their teacher'}?`
+    if (!window.confirm(question)) return
+    setPending(u.id)
+    setNotice(null)
+    try {
+      await assignTeacher(u.id, teacherId)
+      setNotice({ ok: true, text: to ? `${u.name} is now linked to ${to.name}.` : `${u.name} is no longer linked to a teacher.` })
+      refresh()
+    } catch (err) {
+      setNotice({ ok: false, text: err instanceof ApiError ? err.message : 'The teacher could not be changed.' })
+    } finally {
+      setPending(null)
+    }
+  }
 
   const update = async (u: Account, role: Account['role']) => {
     if (role === u.role) return
@@ -76,7 +97,7 @@ export default function AdminUsers() {
           <h1>Users &amp; Roles</h1>
           <p>
             Everyone who signs up starts as a student. Choose who is a teacher or an admin; changes take effect at their next sign-in.
-            Teachers get a reference ID that their students link with.
+            Teachers get a reference ID that their students link with; only an admin can move a linked student to another teacher.
           </p>
         </div>
         <button type="button" className="btn" onClick={refresh}>
@@ -189,9 +210,30 @@ export default function AdminUsers() {
                             <button type="button" className="link-btn small" disabled={pending === u.id} onClick={() => void codeAction(u, 'regenerate')}>
                               Replace
                             </button>
+                            <span className="muted small">
+                              {u.studentCount ?? 0} student{u.studentCount === 1 ? '' : 's'}
+                            </span>
                           </span>
                         ) : u.role === 'user' ? (
-                          (u.teacherName ?? <span className="muted">Not linked</span>)
+                          <>
+                            <label className="sr-only" htmlFor={`teacher-${u.id}`}>
+                              Teacher for {u.name}
+                            </label>
+                            <select
+                              id={`teacher-${u.id}`}
+                              className="role-select"
+                              value={teachers.some((t) => t.id === u.teacherId) ? (u.teacherId ?? '') : ''}
+                              disabled={pending === u.id}
+                              onChange={(e) => void reassign(u, e.target.value || null)}
+                            >
+                              <option value="">Not linked</option>
+                              {teachers.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.name}
+                                </option>
+                              ))}
+                            </select>
+                          </>
                         ) : (
                           <span className="muted">—</span>
                         )}

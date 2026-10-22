@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../api/client'
 import { ACTIVITY_THRESHOLDS, EXPERIMENTS, type ActivityStatus } from '../../analytics/types'
 import { fmtDateTime, fmtDuration, fmtRelative } from '../../app/format'
@@ -114,7 +114,10 @@ function ActivityPanel() {
             <li key={i.id} className={`feed-${i.type} ${data.seenAt === null || i.at > data.seenAt ? 'is-new' : ''}`}>
               <span className="feed-dot" aria-hidden />
               <span className="feed-text">
-                <strong>{i.studentName}</strong> {lowerFirst(describeEvent(i))}
+                <Link to={`/teacher/students/${encodeURIComponent(i.userId)}`} className="feed-who">
+                  {i.studentName}
+                </Link>{' '}
+                {lowerFirst(describeEvent(i))}
               </span>
               <time className="muted small" dateTime={new Date(i.at).toISOString()} title={fmtDateTime(i.at)}>
                 {fmtRelative(i.at)}

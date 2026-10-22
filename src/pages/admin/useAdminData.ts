@@ -29,8 +29,12 @@ export interface Account {
   lastLoginAt: number | null
   /** Students: the teacher they are linked to. */
   teacherName: string | null
+  /** Students: their teacher's account id. */
+  teacherId: string | null
   /** Teachers: their current reference ID. */
   teacherCode: TeacherCode | null
+  /** Teachers: how many students are linked to them. */
+  studentCount: number | null
 }
 
 export async function loadAccounts() {
@@ -39,6 +43,11 @@ export async function loadAccounts() {
 
 export async function changeRole(id: string, role: Role) {
   return (await api<{ user: Account }>(`/admin/users/${encodeURIComponent(id)}/role`, { method: 'PATCH', body: { role } })).user
+}
+
+/** Reassign a student to another teacher, or unlink them (null). */
+export async function assignTeacher(id: string, teacherId: string | null) {
+  return (await api<{ user: Account }>(`/admin/users/${encodeURIComponent(id)}/teacher`, { method: 'PATCH', body: { teacherId } })).user
 }
 
 export async function changeTeacherCode(id: string, action: 'disable' | 'enable' | 'regenerate') {

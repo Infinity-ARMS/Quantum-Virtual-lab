@@ -182,8 +182,14 @@ export function createApp(opts: AppOptions) {
   }
 
   /** Record the link as an activity event, so the teacher is notified that the student joined. */
-  const recordLink = (studentId: string, teacherId: string) =>
-    repo.insertEvent(db, { id: `link-${randomUUID()}`, userId: studentId, type: 'teacher_linked', at: Date.now(), detail: { teacher: teacherId } })
+  const recordLink = (studentId: string, teacherId: string, via: 'code' | 'admin' = 'code') =>
+    repo.insertEvent(db, {
+      id: `link-${randomUUID()}`,
+      userId: studentId,
+      type: 'teacher_linked',
+      at: Date.now(),
+      detail: { teacher: teacherId, via },
+    })
 
   const sessionBody = (u: repo.UserRow) => ({ user: { ...repo.toProfile(u), role: u.role } })
 
@@ -274,7 +280,10 @@ export function createApp(opts: AppOptions) {
     requireAuth(async (req, res) => send(res, 200, { profile: { ...repo.toProfile(req.auth!.user), teacher: await teacherOf(req.auth!.user) } })),
   )
 
-  /** Enrolment for existing students: link (or move) the signed-in student to the teacher who owns the code. */
+  /**
+   * Enrolment for students who are not linked yet (or whose teacher is no longer a teacher). The reference ID is
+   * entered once: a linked student cannot move to another teacher this way — an admin reassigns them instead.
+   */
   route(
     'POST',
     '/api/me/teacher',
@@ -285,6 +294,8 @@ export function createApp(opts: AppOptions) {
       if (!code) throw new HttpError(400, "Enter your teacher's reference ID.")
       const teacher = await teacherFromCode(code, `link|${user.id}`)
       if (user.teacher_id !== teacher.id) {
+        const current = await teacherOf(user)
+        if (current) throw new HttpError(409, `You are already linked to ${current.name}. To change teacher, ask an administrator.`)
         await repo.linkStudentToTeacher(db, user.id, teacher.id)
         await recordLink(user.id, teacher.id)
       }
@@ -505,13 +516,40 @@ export function createApp(opts: AppOptions) {
         const c = await repo.currentTeacherCode(db, u.id)
         if (c) codes.set(u.id, c)
       }
+      const linked = new Map<string, number>()
+      for (const u of users) if (u.role === 'user' && u.teacher_id) linked.set(u.teacher_id, (linked.get(u.teacher_id) ?? 0) + 1)
       send(res, 200, {
         users: users.map((u) => ({
           ...repo.toAccount(u),
           teacherName: u.role === 'user' && u.teacher_id ? (names.get(u.teacher_id) ?? null) : null,
           teacherCode: codes.has(u.id) ? codeBody(codes.get(u.id)!) : null,
+          studentCount: u.role === 'teacher' ? (linked.get(u.id) ?? 0) : null,
         })),
       })
+    }),
+  )
+
+  /**
+   * Reassign (or unlink) a student's teacher — the only way to change a linked student's teacher. The student's
+   * experiment records stay on their account, so the new teacher sees the full history.
+   */
+  route(
+    'PATCH',
+    '/api/admin/users/:id/teacher',
+    requireAdmin(async (req, res, body) => {
+      const student = await repo.findUserById(db, req.params!.id)
+      if (!student || student.role !== 'user') throw new HttpError(404, 'Not found')
+      const raw = obj(body).teacherId
+      if (raw !== null && typeof raw !== 'string') throw new HttpError(400, 'teacherId must be a teacher account id or null.')
+      const teacher = raw === null ? null : await repo.findUserById(db, raw)
+      if (raw !== null && (!teacher || teacher.role !== 'teacher' || teacher.status !== 'enrolled'))
+        throw new HttpError(400, 'Choose an active teacher account.')
+      if (student.teacher_id !== (teacher?.id ?? null)) {
+        await repo.linkStudentToTeacher(db, student.id, teacher?.id ?? null)
+        if (teacher) await recordLink(student.id, teacher.id, 'admin')
+      }
+      const updated = (await repo.findUserById(db, student.id))!
+      send(res, 200, { user: { ...repo.toAccount(updated), teacherName: teacher?.name ?? null } })
     }),
   )
 

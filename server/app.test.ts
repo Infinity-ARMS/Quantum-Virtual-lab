@@ -448,6 +448,16 @@ describe('teachers: roles, reference IDs and student linking', () => {
     expect((await call('/api/me/teacher', { method: 'POST', body: { code: teacherA.code } })).status).toBe(401)
   })
 
+  it('the reference ID is entered once: a linked student cannot switch teacher on their own', async () => {
+    const { cookie } = await login('student001', 'student-pass-1')
+    const other = await call('/api/me/teacher', { method: 'POST', cookie, body: { code: teacherB.code } })
+    expect(other.status).toBe(409)
+    expect((await other.json()).error).toMatch(/already linked to Meera Iyer.*administrator/)
+    expect((await db.get<{ teacher_id: string }>(`SELECT teacher_id FROM users WHERE id = 'QL001'`))!.teacher_id).toBe(teacherA.id)
+    // entering the same teacher's ID again changes nothing
+    expect((await call('/api/me/teacher', { method: 'POST', cookie, body: { code: teacherA.code } })).status).toBe(200)
+  })
+
   it("Teacher A cannot open Teacher B's students — or any other account — by id", async () => {
     const kabir = (await db.get<{ id: string }>(`SELECT id FROM users WHERE email = 'kabir@sakec.ac.in'`))!.id
     expect((await call(`/api/teacher/students/${kabir}`, { cookie: teacherB.cookie })).status).toBe(200)
@@ -529,10 +539,37 @@ describe('teachers: roles, reference IDs and student linking', () => {
     expect((await (await call('/api/teacher/activity', { cookie: teacherB.cookie })).json()).seenAt).toBeNull()
   })
 
+  it('only an admin can move a student to another teacher; the records stay with the student', async () => {
+    const move = (id: string, teacherId: unknown, cookie?: string) =>
+      call(`/api/admin/users/${id}/teacher`, { method: 'PATCH', cookie, body: { teacherId } })
+    const events = async () => (await db.all(`SELECT id FROM analytics_events WHERE user_id = 'QL001'`)).length
+    const before = await events()
+    expect((await move('QL001', teacherB.id)).status).toBe(401)
+    expect((await move('QL001', teacherB.id, (await login('student001', 'student-pass-1')).cookie)).status).toBe(403)
+    expect((await move('QL001', teacherB.id, teacherA.cookie)).status).toBe(403)
+    expect((await move('QL001', 'QL001', adminCookie)).status).toBe(400) // not a teacher account
+    expect((await move('QL001', 42, adminCookie)).status).toBe(400)
+    expect((await move('ADM01', teacherB.id, adminCookie)).status).toBe(404) // not a student
+
+    const res = await move('QL001', teacherB.id, adminCookie)
+    expect(res.status).toBe(200)
+    expect((await res.json()).user).toMatchObject({ id: 'QL001', teacherId: teacherB.id, teacherName: 'Rahul Nair' })
+    expect((await call('/api/teacher/students/QL001', { cookie: teacherB.cookie })).status).toBe(200)
+    expect((await call('/api/teacher/students/QL001', { cookie: teacherA.cookie })).status).toBe(403)
+    const feed = (await (await call('/api/teacher/activity', { cookie: teacherB.cookie })).json()).items
+    expect(feed[0]).toMatchObject({ type: 'teacher_linked', userId: 'QL001', detail: { via: 'admin' } })
+    expect(await events()).toBe(before + 1) // nothing removed: only the link itself was recorded
+
+    expect((await move('QL001', null, adminCookie)).status).toBe(200)
+    expect((await db.get<{ teacher_id: string | null }>(`SELECT teacher_id FROM users WHERE id = 'QL001'`))!.teacher_id).toBeNull()
+    expect((await move('QL001', teacherA.id, adminCookie)).status).toBe(200)
+  })
+
   it('admins see teachers with their IDs and students with their teacher, and can disable an ID', async () => {
     const { users } = await (await call('/api/admin/users', { cookie: adminCookie })).json()
     const a = users.find((u: { id: string }) => u.id === teacherA.id)
-    expect(a).toMatchObject({ role: 'teacher', teacherCode: { code: teacherA.code, status: 'active' } })
+    expect(a).toMatchObject({ role: 'teacher', teacherCode: { code: teacherA.code, status: 'active' }, studentCount: 2 })
+    expect(users.find((u: { id: string }) => u.id === teacherB.id).studentCount).toBe(1)
     expect(users.find((u: { id: string }) => u.id === 'QL001').teacherName).toBe('Meera Iyer')
     const res = await call(`/api/admin/teachers/${teacherA.id}/code`, { method: 'PATCH', cookie: adminCookie, body: { action: 'disable' } })
     expect((await res.json()).code.status).toBe('disabled')
@@ -545,6 +582,9 @@ describe('teachers: roles, reference IDs and student linking', () => {
     expect((await call('/api/teacher/overview', { cookie: teacherB.cookie })).status).toBe(401) // old session ends
     const res = await register({ name: 'Late', email: 'late@sakec.ac.in', password: 'password123', teacherCode: teacherB.code })
     expect((await res.json()).error).toMatch(/no longer valid/)
+    // their former students are free to enrol with another teacher
+    const kabir = await login('kabir@sakec.ac.in', 'password123')
+    expect((await call('/api/me/teacher', { method: 'POST', cookie: kabir.cookie, body: { code: teacherA.code } })).status).toBe(200)
   })
 
   it('throttles repeated wrong reference IDs (no guessing)', async () => {

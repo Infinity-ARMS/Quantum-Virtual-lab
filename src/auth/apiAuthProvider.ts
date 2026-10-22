@@ -53,7 +53,7 @@ export const apiAuthProvider: AuthProvider = {
     try {
       return (await api<{ teacher: { name: string } }>('/me/teacher', { method: 'POST', body: { code } })).teacher
     } catch (err) {
-      if (err instanceof ApiError && (err.status === 400 || err.status === 429)) throw new AuthError(err.message)
+      if (err instanceof ApiError && (err.status === 400 || err.status === 409 || err.status === 429)) throw new AuthError(err.message)
       throw err
     }
   },

@@ -4,6 +4,7 @@ import { analytics } from '../../analytics/analyticsService'
 import { EXPERIMENTS, type ExperimentId, type StudentSummary } from '../../analytics/types'
 import { fmtDuration } from '../../app/format'
 import { authProvider, useAuth } from '../../auth/AuthContext'
+import { TeacherLink } from './TeacherLink'
 
 export function useOwnSummary() {
   const { session } = useAuth()
@@ -90,6 +91,7 @@ export default function StudentDashboard() {
   const { session } = useAuth()
   const summary = useOwnSummary()
   const needsTeacher = useNeedsTeacher()
+  const [linkedTo, setLinkedTo] = useState<string | null>(null)
   const first = session?.displayName.split(' ')[0] ?? 'there'
   const done = new Set(summary?.completedIds ?? [])
   return (
@@ -114,13 +116,13 @@ export default function StudentDashboard() {
       </section>
 
       {needsTeacher && (
-        <div className="link-nudge" role="note">
-          <span>
-            <b>Link your teacher</b> — enter the reference ID your teacher gave you so they can follow your progress.
-          </span>
-          <Link to="/student/profile" className="btn">
-            Add reference ID
-          </Link>
+        <div className="panel enroll-card">
+          <TeacherLink
+            teacher={linkedTo ? { name: linkedTo } : null}
+            onLinked={setLinkedTo}
+            title="Link your teacher"
+            intro="Enter the reference ID your teacher gave you so they can follow your progress. You only need to do this once."
+          />
         </div>
       )}
 

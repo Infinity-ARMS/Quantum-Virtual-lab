@@ -50,7 +50,7 @@ export function describeEvent(e: AnalyticsEvent): string {
     case 'example_loaded':
       return `Loaded the example circuit in ${exp}`
     case 'teacher_linked':
-      return 'Joined using the teacher reference ID'
+      return e.detail?.via === 'admin' ? 'Was linked to a teacher by an administrator' : 'Joined using the teacher reference ID'
     default:
       return e.type
   }
