@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { EXPERIMENTS } from '../src/analytics/types.ts'
 import { COOKIE, createApp } from './app.ts'
 import { connectDatabase, MIGRATIONS, openDatabase, runMigrations, type DB } from './db.ts'
 import { insertUser } from './repo.ts'
@@ -298,11 +299,11 @@ describe('analytics ingestion', () => {
     const admin = await login('admin', 'admin-pass-123')
     const { students } = await (await call('/api/admin/students', { cookie: admin.cookie })).json()
     const s = students.find((x: { profile: { id: string } }) => x.profile.id === 'QL001').summary
-    // 5 runs in total (r-1 … r-5), but only 2 distinct experiments opened and 1 of the 6 completed
+    // 5 runs in total (r-1 … r-5), but only 2 distinct experiments opened and 1 of all the experiments completed
     expect(s.experimentsStarted).toBe(2)
     expect(s.experimentsCompleted).toBe(1)
     expect(s.completedIds).toEqual(['measure-h'])
-    expect(s.completionPct).toBe(17)
+    expect(s.completionPct).toBe(Math.round(100 / EXPERIMENTS.length))
   })
 })
 

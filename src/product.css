@@ -1043,6 +1043,20 @@ input[aria-invalid='true'] {
 .la-fill.soft {
   fill: #93c5fd;
 }
+/* Qubit State Lab card: θ's disc and arc in the knob colours */
+.la-disc {
+  fill: rgba(234, 88, 12, 0.12);
+  stroke: #ea580c;
+  stroke-width: 1.5;
+}
+.la-arc {
+  fill: none;
+  stroke: #ea580c;
+  stroke-width: 2;
+}
+.la-tip {
+  fill: #f59e0b;
+}
 .lab-card-body {
   grid-area: body;
 }
@@ -1592,6 +1606,17 @@ input[aria-invalid='true'] {
   }
   .detail-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* mid-size screens with the student's four menu items: the header stays one 62 px row (the lab pages are sized
+   to it), so the profile button shows its avatar only (name and ID are in its menu) and the links sit closer */
+@media (min-width: 901px) and (max-width: 1179px) {
+  .shell-header:has(.nav-link:nth-child(4)) .profile-text {
+    display: none;
+  }
+  .shell-header:has(.nav-link:nth-child(4)) .nav-link {
+    padding: 0 9px;
   }
 }
 

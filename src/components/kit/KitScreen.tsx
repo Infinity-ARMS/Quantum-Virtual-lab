@@ -48,18 +48,22 @@ export interface ScreenProps {
   snapKey: number
 }
 
+/** The kit's boot screen, shown for a moment when an experiment page opens. */
+export function TftBoot() {
+  return (
+    <div className="tft-boot">
+      <BrandMark size={40} />
+      <strong>Quantum Logic and Measurement Emulator</strong>
+      <span className="tft-boot-bar">
+        <span />
+      </span>
+    </div>
+  )
+}
+
 /** The 2.8″ TFT: boot screen, then the lab's screen — the Bloch sphere (Bloch Sphere Lab) or the probability graph (Measurement Lab). */
 export function KitScreen(p: ScreenProps) {
-  if (p.booting)
-    return (
-      <div className="tft-boot">
-        <BrandMark size={40} />
-        <strong>Quantum Logic and Measurement Emulator</strong>
-        <span className="tft-boot-bar">
-          <span />
-        </span>
-      </div>
-    )
+  if (p.booting) return <TftBoot />
   return (
     <div className="tft-ui">
       <header className="tft-head">

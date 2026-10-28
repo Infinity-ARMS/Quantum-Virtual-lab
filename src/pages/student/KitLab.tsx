@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { analytics } from '../../analytics/analyticsService'
 import { EXPERIMENTS, type ExperimentId } from '../../analytics/types'
 import { useExperimentRun } from '../../analytics/useExperimentRun'
@@ -19,6 +19,7 @@ import {
 } from '../../lab/circuit'
 import { LabContext } from '../../lab/LabContext'
 import { GATE_GAP_MS, GATE_TURN_MS, SINGLE_LABELS } from '../../lab/readout'
+import { useKitFit, type KitMinSize } from '../../lab/useKitFit'
 import { useLabWiring } from '../../lab/useLabWiring'
 import { useOutputReveal } from '../../lab/useOutputReveal'
 import type { GateName } from '../../quantum/gates'
@@ -86,44 +87,10 @@ function ketOf(q: Qubit): string {
   return name
 }
 
-/** Phone layouts (the same media queries as in kit.css): the whole kit on one screen, without scrolling. */
-const PHONE_PORTRAIT = '(max-width: 600px) and (orientation: portrait)'
-const PHONE_LANDSCAPE = '(max-width: 1000px) and (max-height: 500px) and (orientation: landscape)'
-/** The smallest panel (CSS px) each phone layout needs; on a smaller screen the panel is scaled down to fit. */
-const PHONE_MIN: Record<'portrait' | 'landscape', Record<Lab, { w: number; h: number }>> = {
-  portrait: { bloch: { w: 340, h: 540 }, measurement: { w: 400, h: 740 } },
-  landscape: { bloch: { w: 730, h: 230 }, measurement: { w: 1040, h: 260 } },
-}
-
-/**
- * On phones: the page below the header is exactly the window's height (nothing to scroll) and the panel is drawn at
- * `w × h` and scaled by `s` (≤ 1) to fill it. Returns null elsewhere — the normal responsive layout applies.
- */
-function useKitFit(page: React.RefObject<HTMLDivElement | null>, lab: Lab) {
-  const [fit, setFit] = useState<{ pageH: number; w: number; h: number; s: number } | null>(null)
-  useLayoutEffect(() => {
-    const update = () => {
-      const el = page.current
-      const mode = matchMedia(PHONE_PORTRAIT).matches ? 'portrait' : matchMedia(PHONE_LANDSCAPE).matches ? 'landscape' : null
-      if (!el || !mode) return setFit(null)
-      const cs = getComputedStyle(el)
-      const pageH = Math.max(0, Math.floor(window.innerHeight - (el.getBoundingClientRect().top + window.scrollY)))
-      const w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
-      const h = pageH - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
-      const min = PHONE_MIN[mode][lab]
-      const s = Math.min(1, w / min.w, h / min.h)
-      const next = { pageH, w: Math.floor(w / s), h: Math.floor(h / s), s }
-      setFit((f) => (f && f.pageH === next.pageH && f.w === next.w && f.h === next.h && f.s === next.s ? f : next))
-    }
-    update()
-    window.addEventListener('resize', update)
-    window.visualViewport?.addEventListener('resize', update)
-    return () => {
-      window.removeEventListener('resize', update)
-      window.visualViewport?.removeEventListener('resize', update)
-    }
-  }, [page, lab])
-  return fit
+/** The smallest panel (CSS px) each lab needs in each phone layout; on a smaller screen the panel is scaled down. */
+const PHONE_MIN: Record<Lab, KitMinSize> = {
+  bloch: { portrait: { w: 340, h: 540 }, landscape: { w: 730, h: 230 } },
+  measurement: { portrait: { w: 400, h: 740 }, landscape: { w: 1040, h: 260 } },
 }
 
 /** "|0⟩ → H → Z": the initial state and the gates it passes through. */
@@ -154,7 +121,7 @@ function experimentOfCable(lab: Lab, from: string, to: string): ExperimentId {
 export function KitLab({ lab }: { lab: Lab }) {
   const cfg = LABS[lab]
   const pageRef = useRef<HTMLDivElement>(null)
-  const fit = useKitFit(pageRef, lab)
+  const fit = useKitFit(pageRef, PHONE_MIN[lab])
   const wiring = useLabWiring(cfg.storage, (from, to) => analytics.trackWireConnection(experimentOfCable(lab, from, to), from, to))
   const { conns } = wiring
 

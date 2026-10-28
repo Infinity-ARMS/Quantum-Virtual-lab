@@ -9,9 +9,9 @@ type Vec3 = [number, number, number]
 type RouteStep = { axis: Vec3; to: Vec3 }
 
 /** Physics Bloch (x, y, z) → three.js world. Z is up, X points toward the viewer, Y to the right (right-handed). */
-const toWorld = ([x, y, z]: Vec3) => new THREE.Vector3(y, z, x)
+export const toWorld = ([x, y, z]: Vec3) => new THREE.Vector3(y, z, x)
 
-const P = {
+export const P = {
   sphere: '#c7d2fe',
   sphereOpacity: 0.14,
   disk: '#6366f1',
@@ -31,15 +31,15 @@ const P = {
   guide: '#64748b',
   trail: '#a855f7',
 }
-type Palette = typeof P
+export type Palette = typeof P
 
-const HOME = new THREE.Vector3(3.3, 2.1, 3.9)
+export const HOME = new THREE.Vector3(3.3, 2.1, 3.9)
 
 function ring(fn: (t: number) => Vec3, n = 128) {
   return Array.from({ length: n + 1 }, (_, i) => fn((i / n) * Math.PI * 2))
 }
 
-function SphereFrame({ p }: { p: Palette }) {
+export function SphereFrame({ p }: { p: Palette }) {
   const grid = useMemo(() => {
     // latitudes at ±30°, ±60° and longitudes every 30° (world Y is the Bloch Z axis)
     const lats = [-60, -30, 30, 60].map((deg) => {
@@ -84,7 +84,7 @@ function SphereFrame({ p }: { p: Palette }) {
   )
 }
 
-function Axis({ to, color }: { to: Vec3; color: string }) {
+export function Axis({ to, color }: { to: Vec3; color: string }) {
   const end = useMemo(() => toWorld(to).multiplyScalar(1.34), [to])
   const quat = useMemo(
     () => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), end.clone().normalize()),
@@ -106,10 +106,10 @@ function Axis({ to, color }: { to: Vec3; color: string }) {
 }
 
 /** Axis/state labels are plain DOM, positioned by projecting 3D anchors every frame. */
-const X_AXIS: Vec3 = [1, 0, 0]
-const Y_AXIS: Vec3 = [0, 1, 0]
-const Z_AXIS: Vec3 = [0, 0, 1]
-const LABELS: { at: Vec3; axis: string; ket: string; cls: string }[] = [
+export const X_AXIS: Vec3 = [1, 0, 0]
+export const Y_AXIS: Vec3 = [0, 1, 0]
+export const Z_AXIS: Vec3 = [0, 0, 1]
+export const LABELS: { at: Vec3; axis: string; ket: string; cls: string }[] = [
   { at: [0, 0, 1.56], axis: '+Z', ket: '|0⟩', cls: 'z pole' },
   { at: [0, 0, -1.3], axis: '−Z', ket: '|1⟩', cls: 'z pole' },
   { at: [1.58, 0, 0], axis: '+X', ket: '|+⟩', cls: 'x' },
@@ -118,7 +118,7 @@ const LABELS: { at: Vec3; axis: string; ket: string; cls: string }[] = [
   { at: [0, -1.52, 0], axis: '−Y', ket: '|−i⟩', cls: 'y' },
 ]
 
-function LabelProjector({ els }: { els: React.RefObject<(HTMLSpanElement | null)[]> }) {
+export function LabelProjector({ els }: { els: React.RefObject<(HTMLSpanElement | null)[]> }) {
   const anchors = useMemo(() => LABELS.map((l) => toWorld(l.at)), [])
   const v = useMemo(() => new THREE.Vector3(), [])
   useFrame(({ camera, size }) => {

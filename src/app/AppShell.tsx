@@ -12,6 +12,7 @@ const STUDENT_NAV = [
   { to: '/student', label: 'Dashboard', end: true },
   { to: '/student/bloch', label: 'Bloch Sphere Lab', end: false },
   { to: '/student/measurement', label: 'Measurement Lab', end: false },
+  { to: '/student/qubit-state', label: 'Qubit State Lab', end: false },
 ]
 const TEACHER_NAV = [{ to: '/teacher', label: 'My Students', end: false }]
 const ADMIN_NAV = [

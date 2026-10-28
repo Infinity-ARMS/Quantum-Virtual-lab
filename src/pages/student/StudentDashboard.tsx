@@ -67,6 +67,25 @@ const LABS: {
       </svg>
     ),
   },
+  {
+    to: '/student/qubit-state',
+    kicker: 'Lab 03',
+    title: 'Qubit State Lab',
+    text: 'Turn two knobs to place the qubit anywhere on the Bloch sphere — the rotation gate logic of the kit. POT 1 sets the polar angle θ (0–180°): the arrow tilts away from |0⟩ and its disc forms. POT 2 sets the azimuth φ (0–360°): the arrow moves round that disc. P(|0⟩), P(|1⟩) and the state update live.',
+    tags: ['θ polar · POT 1', 'φ azimuth · POT 2', 'Rotation gates'],
+    experiments: ['qubit-state'],
+    art: (
+      <svg viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="44" className="la-sphere" />
+        <ellipse cx="60" cy="60" rx="44" ry="14" className="la-line faint" />
+        <ellipse cx="60" cy="38" rx="35" ry="10" className="la-disc" />
+        <line x1="60" y1="8" x2="60" y2="112" className="la-axis" />
+        <path d="M60 44 A16 16 0 0 1 72 49" className="la-arc" />
+        <line x1="60" y1="60" x2="87" y2="44" className="la-vector" />
+        <circle cx="87" cy="44" r="5" className="la-tip" />
+      </svg>
+    ),
+  },
 ]
 
 /** Whether the student still needs to link a teacher (null while unknown). */
@@ -148,7 +167,7 @@ export default function StudentDashboard() {
               <div className="lab-card-foot">
                 <div className="lab-card-progress">
                   <span>
-                    {completed} of {lab.experiments.length} experiments completed
+                    {completed} of {lab.experiments.length} experiment{lab.experiments.length === 1 ? '' : 's'} completed
                   </span>
                   <span className="progress" aria-hidden>
                     <span style={{ width: `${pct}%` }} />

@@ -1,12 +1,15 @@
-export type ExperimentId = 'bloch-h' | 'bloch-x' | 'bloch-z' | 'measure-h' | 'measure-x' | 'measure-cnot'
+export type ExperimentId = 'bloch-h' | 'bloch-x' | 'bloch-z' | 'measure-h' | 'measure-x' | 'measure-cnot' | 'qubit-state'
 
-export const EXPERIMENTS: { id: ExperimentId; group: 'Bloch Sphere' | 'Measurement'; gate: string; title: string }[] = [
+export type ExperimentGroup = 'Bloch Sphere' | 'Measurement' | 'Qubit State'
+
+export const EXPERIMENTS: { id: ExperimentId; group: ExperimentGroup; gate: string; title: string }[] = [
   { id: 'bloch-h', group: 'Bloch Sphere', gate: 'H', title: 'Bloch Sphere · Hadamard' },
   { id: 'bloch-x', group: 'Bloch Sphere', gate: 'X', title: 'Bloch Sphere · Pauli-X' },
   { id: 'bloch-z', group: 'Bloch Sphere', gate: 'Z', title: 'Bloch Sphere · Pauli-Z' },
   { id: 'measure-h', group: 'Measurement', gate: 'H', title: 'Measurement · Hadamard' },
   { id: 'measure-x', group: 'Measurement', gate: 'X', title: 'Measurement · NOT (Pauli-X)' },
   { id: 'measure-cnot', group: 'Measurement', gate: 'CNOT', title: 'Measurement · CNOT' },
+  { id: 'qubit-state', group: 'Qubit State', gate: 'θ, φ', title: 'Qubit State · Rotation (θ, φ)' },
 ]
 
 /** Experiments that were replaced but can still appear in older records (shown by name, not counted). */

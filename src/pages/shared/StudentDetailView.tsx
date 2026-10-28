@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { EXPERIMENTS, type StudentDetail } from '../../analytics/types'
+import { EXPERIMENTS, type ExperimentGroup, type StudentDetail } from '../../analytics/types'
 import { fmtDateTime, fmtDuration, fmtRelative, initials } from '../../app/format'
 import type { StudentProfile } from '../../auth/types'
 import { describeEvent, EXP_NAME, StatusChip } from './activity'
@@ -43,7 +43,7 @@ export function StudentDetailView({
     )
 
   const { profile, detail } = data
-  const groups: ('Bloch Sphere' | 'Measurement')[] = ['Bloch Sphere', 'Measurement']
+  const groups: ExperimentGroup[] = ['Bloch Sphere', 'Measurement', 'Qubit State']
 
   return (
     <div className="page wide">

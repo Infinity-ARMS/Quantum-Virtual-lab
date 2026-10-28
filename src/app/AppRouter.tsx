@@ -9,6 +9,7 @@ import { RequireRole } from './guards'
 // Three.js and the lab only load when an experiment opens; teacher and admin pages load for those roles only
 const BlochLabPage = lazy(() => import('../pages/student/BlochLabPage'))
 const MeasurementLabPage = lazy(() => import('../pages/student/MeasurementLabPage'))
+const QubitStateLabPage = lazy(() => import('../pages/student/QubitStateLabPage'))
 const ProfilePage = lazy(() => import('../pages/student/ProfilePage'))
 const AdminDashboard = lazy(() => import('../pages/admin/AdminDashboard'))
 const AdminStudentDetail = lazy(() => import('../pages/admin/AdminStudentDetail'))
@@ -58,6 +59,7 @@ export function AppRouter() {
           <Route path="bloch/:gate" element={<Navigate to="/student/bloch" replace />} />
           <Route path="measurement" element={<MeasurementLabPage />} />
           <Route path="measurement/:kind" element={<Navigate to="/student/measurement" replace />} />
+          <Route path="qubit-state" element={<QubitStateLabPage />} />
           <Route path="*" element={<Navigate to="/student" replace />} />
         </Route>
 
