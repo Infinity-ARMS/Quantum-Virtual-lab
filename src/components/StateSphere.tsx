@@ -413,7 +413,7 @@ function RotationRig({ target, labels }: { target: React.RefObject<Angles>; labe
 }
 
 /**
- * The Qubit State Lab's Bloch sphere: the arrow is set by the two knobs, θ (polar angle from |0⟩) and φ (azimuth
+ * The Quantum Qubit State Lab's Bloch sphere: the arrow is set by the two knobs, θ (polar angle from |0⟩) and φ (azimuth
  * round the equator from |+⟩). Drag to look around it.
  */
 export function StateSphere({ theta, phi }: Angles) {

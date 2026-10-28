@@ -43,7 +43,7 @@ export function StudentDetailView({
     )
 
   const { profile, detail } = data
-  const groups: ExperimentGroup[] = ['Bloch Sphere', 'Measurement', 'Qubit State']
+  const groups: ExperimentGroup[] = ['Bloch Sphere', 'Measurement', 'Quantum Qubit State']
 
   return (
     <div className="page wide">

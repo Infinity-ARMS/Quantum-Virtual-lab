@@ -1043,7 +1043,7 @@ input[aria-invalid='true'] {
 .la-fill.soft {
   fill: #93c5fd;
 }
-/* Qubit State Lab card: θ's disc and arc in the knob colours */
+/* Quantum Qubit State Lab card: θ's disc and arc in the knob colours */
 .la-disc {
   fill: rgba(234, 88, 12, 0.12);
   stroke: #ea580c;
@@ -1611,12 +1611,35 @@ input[aria-invalid='true'] {
 
 /* mid-size screens with the student's four menu items: the header stays one 62 px row (the lab pages are sized
    to it), so the profile button shows its avatar only (name and ID are in its menu) and the links sit closer */
-@media (min-width: 901px) and (max-width: 1179px) {
+@media (min-width: 901px) and (max-width: 1279px) {
   .shell-header:has(.nav-link:nth-child(4)) .profile-text {
     display: none;
   }
   .shell-header:has(.nav-link:nth-child(4)) .nav-link {
     padding: 0 9px;
+  }
+}
+/* the narrowest of those: a little tighter still, so the brand name stays on one line */
+@media (min-width: 901px) and (max-width: 1120px) {
+  .shell-header:has(.nav-link:nth-child(4)) .shell-nav {
+    gap: 2px;
+    margin-left: 4px;
+  }
+  .shell-header:has(.nav-link:nth-child(4)) .nav-link {
+    padding: 0 7px;
+    font-size: 13.5px;
+  }
+  .shell-header:has(.nav-link:nth-child(4)) .brand-title {
+    font-size: 14px;
+  }
+}
+@media (min-width: 901px) and (max-width: 1040px) {
+  .shell-header:has(.nav-link:nth-child(4)) .nav-link {
+    padding: 0 5px;
+    font-size: 13px;
+  }
+  .shell-header:has(.nav-link:nth-child(4)) .brand-title {
+    font-size: 13.5px;
   }
 }
 

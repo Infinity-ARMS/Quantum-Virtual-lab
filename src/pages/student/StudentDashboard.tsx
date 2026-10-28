@@ -70,7 +70,7 @@ const LABS: {
   {
     to: '/student/qubit-state',
     kicker: 'Lab 03',
-    title: 'Qubit State Lab',
+    title: 'Quantum Qubit State Lab',
     text: 'Turn two knobs to place the qubit anywhere on the Bloch sphere — the rotation gate logic of the kit. POT 1 sets the polar angle θ (0–180°): the arrow tilts away from |0⟩ and its disc forms. POT 2 sets the azimuth φ (0–360°): the arrow moves round that disc. P(|0⟩), P(|1⟩) and the state update live.',
     tags: ['θ polar · POT 1', 'φ azimuth · POT 2', 'Rotation gates'],
     experiments: ['qubit-state'],

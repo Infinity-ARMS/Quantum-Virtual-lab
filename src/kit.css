@@ -788,7 +788,7 @@
   border-color: #c7d2fe;
   background: #eef2ff;
 }
-/* ================================================================== Qubit State Lab: rotation screen and knobs */
+/* ================================================================== Quantum Qubit State Lab: rotation screen and knobs */
 
 /* θ (pot 1) and φ (pot 2) keep one colour each on the sphere, the knobs and the readout (StateSphere ROT_COLORS) */
 .lab-qubit {
@@ -1725,7 +1725,7 @@
   }
 }
 
-/* Qubit State Lab on phones: the knobs side by side under the screen, each named on one line above its dial */
+/* Quantum Qubit State Lab on phones: the knobs side by side under the screen, each named on one line above its dial */
 @media (max-width: 600px) and (orientation: portrait), (max-width: 1000px) and (max-height: 500px) and (orientation: landscape) {
   .hw-rot {
     gap: 6px;

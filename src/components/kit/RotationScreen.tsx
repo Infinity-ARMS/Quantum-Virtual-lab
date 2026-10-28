@@ -15,7 +15,7 @@ interface Props {
 const fix = (v: number) => (Math.abs(v) < 0.005 ? 0 : v).toFixed(2).replace('-', '−')
 
 /**
- * The Qubit State Lab's TFT, laid out like the kit's "QUANTUM ROTATION" screen: the Bloch sphere with the state set
+ * The Quantum Qubit State Lab's TFT, laid out like the kit's "QUANTUM ROTATION" screen: the Bloch sphere with the state set
  * by the two knobs, and beside it the point P(θ, φ), both angles, P(|0⟩), P(|1⟩) and the state itself, all live.
  */
 export function RotationScreen({ booting, theta, phi, readout: r, chip, footer }: Props) {

@@ -40,7 +40,7 @@ function loadAngles(): Angles {
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
 
 /**
- * Qubit State Lab: the kit panel with the rotation gate's two potentiometers. POT 1 sets the polar angle θ (0–180°):
+ * Quantum Qubit State Lab: the kit panel with the rotation gate's two potentiometers. POT 1 sets the polar angle θ (0–180°):
  * the arrow tilts away from |0⟩ and its latitude disc forms. POT 2 sets the azimuth φ (0–360°): the arrow moves
  * round that disc. Together they reach any point P(θ, φ) on the Bloch sphere; the TFT shows the sphere and the
  * calculations live, as the kit's "QUANTUM ROTATION" screen does.
