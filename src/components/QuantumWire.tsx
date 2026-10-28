@@ -131,13 +131,16 @@ export function WireLayer({ container, sockets, conns, live, pending, onRemove, 
     const tick = () => {
       const root = container.current?.getBoundingClientRect()
       if (root) {
+        // the panel may be scaled down to fit a phone screen: positions are in its own (unscaled) pixels
+        const k = root.width / (container.current?.offsetWidth || root.width) || 1
         const next: Record<string, Pt> = {}
         sockets.current.forEach((el, id) => {
           const r = el.getBoundingClientRect()
-          next[id] = { x: Math.round(r.left + r.width / 2 - root.left), y: Math.round(r.top + r.height / 2 - root.top) }
+          next[id] = { x: Math.round((r.left + r.width / 2 - root.left) / k), y: Math.round((r.top + r.height / 2 - root.top) / k) }
         })
         const ch = channel ? container.current?.querySelector(channel)?.getBoundingClientRect() : undefined
-        if (ch) next.__channel = { x: 0, y: Math.round(ch.top + ch.height / 2 - root.top) }
+        // a hidden channel (zero height) means the layout has none: cables take the direct route
+        if (ch && ch.height > 0) next.__channel = { x: 0, y: Math.round((ch.top + ch.height / 2 - root.top) / k) }
         const key = JSON.stringify(next)
         if (key !== last) {
           last = key

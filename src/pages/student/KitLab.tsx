@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { analytics } from '../../analytics/analyticsService'
 import { EXPERIMENTS, type ExperimentId } from '../../analytics/types'
 import { useExperimentRun } from '../../analytics/useExperimentRun'
-import { KitButton, PowerSwitch } from '../../components/kit/KitControls'
-import { KitScreen, type GraphBanner, type GraphView, type ScreenMode, type SingleScreen } from '../../components/kit/KitScreen'
+import { KitButton } from '../../components/kit/KitControls'
+import { KitScreen, type GraphBanner, type ScreenMode, type SingleScreen } from '../../components/kit/KitScreen'
 import { LabToast } from '../../components/lab/LabChrome'
 import { WireLayer } from '../../components/QuantumWire'
 import { Socket } from '../../components/Socket'
@@ -73,7 +73,8 @@ const LABS: Record<
 const BOOT_MS = 1200
 const SHOTS_TO_COMPLETE = 10
 const MAX_SHOTS = 99_999
-const RUN_OPTIONS = [100, 500, 1000] as const
+/** TOTAL SHOTS: with one of these selected, one SHOT press takes that many shots. */
+const BATCH_OPTIONS = [100, 500, 1000] as const
 const ket = (b: Bit) => `|${b}⟩`
 const EXP_TITLE = Object.fromEntries(EXPERIMENTS.map((e) => [e.id, e.title])) as Record<ExperimentId, string>
 
@@ -83,6 +84,46 @@ function ketOf(q: Qubit): string {
   if (name === '|1⟩' && q[1].re < -0.5) return '−|1⟩'
   if (name === '|0⟩' && q[0].re < -0.5) return '−|0⟩'
   return name
+}
+
+/** Phone layouts (the same media queries as in kit.css): the whole kit on one screen, without scrolling. */
+const PHONE_PORTRAIT = '(max-width: 600px) and (orientation: portrait)'
+const PHONE_LANDSCAPE = '(max-width: 1000px) and (max-height: 500px) and (orientation: landscape)'
+/** The smallest panel (CSS px) each phone layout needs; on a smaller screen the panel is scaled down to fit. */
+const PHONE_MIN: Record<'portrait' | 'landscape', Record<Lab, { w: number; h: number }>> = {
+  portrait: { bloch: { w: 340, h: 540 }, measurement: { w: 400, h: 740 } },
+  landscape: { bloch: { w: 730, h: 230 }, measurement: { w: 1040, h: 260 } },
+}
+
+/**
+ * On phones: the page below the header is exactly the window's height (nothing to scroll) and the panel is drawn at
+ * `w × h` and scaled by `s` (≤ 1) to fill it. Returns null elsewhere — the normal responsive layout applies.
+ */
+function useKitFit(page: React.RefObject<HTMLDivElement | null>, lab: Lab) {
+  const [fit, setFit] = useState<{ pageH: number; w: number; h: number; s: number } | null>(null)
+  useLayoutEffect(() => {
+    const update = () => {
+      const el = page.current
+      const mode = matchMedia(PHONE_PORTRAIT).matches ? 'portrait' : matchMedia(PHONE_LANDSCAPE).matches ? 'landscape' : null
+      if (!el || !mode) return setFit(null)
+      const cs = getComputedStyle(el)
+      const pageH = Math.max(0, Math.floor(window.innerHeight - (el.getBoundingClientRect().top + window.scrollY)))
+      const w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+      const h = pageH - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
+      const min = PHONE_MIN[mode][lab]
+      const s = Math.min(1, w / min.w, h / min.h)
+      const next = { pageH, w: Math.floor(w / s), h: Math.floor(h / s), s }
+      setFit((f) => (f && f.pageH === next.pageH && f.w === next.w && f.h === next.h && f.s === next.s ? f : next))
+    }
+    update()
+    window.addEventListener('resize', update)
+    window.visualViewport?.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.visualViewport?.removeEventListener('resize', update)
+    }
+  }, [page, lab])
+  return fit
 }
 
 /** "|0⟩ → H → Z": the initial state and the gates it passes through. */
@@ -107,28 +148,29 @@ function experimentOfCable(lab: Lab, from: string, to: string): ExperimentId {
  * The experiment page: a copy of the hardware kit's front panel. Initial states → gate IN (gates may be chained,
  * e.g. H OUT → Z IN or H OUT → CNOT IN), last gate OUT → its output banana pin. The TFT shows the input state as
  * soon as it is connected and moves to the result when the output pin is wired. The Bloch Sphere Lab's screen
- * shows the Bloch sphere; the Measurement Lab's shows the probability graph, with SHOT (once per press), RUN (the
- * selected number of shots) and RESET.
+ * shows the Bloch sphere; the Measurement Lab's shows the probability graph, with SHOT (once per press, or the
+ * number of shots selected under TOTAL SHOTS) and RESET. The kit is always on: it boots when the page opens.
  */
 export function KitLab({ lab }: { lab: Lab }) {
   const cfg = LABS[lab]
+  const pageRef = useRef<HTMLDivElement>(null)
+  const fit = useKitFit(pageRef, lab)
   const wiring = useLabWiring(cfg.storage, (from, to) => analytics.trackWireConnection(experimentOfCable(lab, from, to), from, to))
   const { conns } = wiring
 
-  const [power, setPower] = useState(true)
   const [booting, setBooting] = useState(true)
   const mode = cfg.mode
-  const [view, setView] = useState<GraphView>('measured')
-  const [runShots, setRunShots] = useState<number>(1000)
+  /** Shots per SHOT press selected under TOTAL SHOTS; null = one shot per press (hold to repeat). */
+  const [batch, setBatch] = useState<number | null>(null)
   const [counts, setCounts] = useState<{ key: string; counts: number[]; total: number; last: { n: number; outcome: number } | null } | null>(null)
   const [notice, setNotice] = useState<{ id: number; text: string; tone: 'info' | 'warn' } | null>(null)
   const [completion, setCompletion] = useState<Completion | null>(null)
 
   useEffect(() => {
-    if (!power || !booting) return
+    if (!booting) return
     const t = setTimeout(() => setBooting(false), BOOT_MS)
     return () => clearTimeout(t)
-  }, [power, booting])
+  }, [booting])
   useEffect(() => {
     if (!notice) return
     const t = setTimeout(() => setNotice((n) => (n?.id === notice.id ? null : n)), 3200)
@@ -141,7 +183,7 @@ export function KitLab({ lab }: { lab: Lab }) {
   const exp: Experiment | null = wired && (wired === 'CNOT' ? cfg.cnot : cfg.gates.includes(wired)) ? wired : null
   const head: GateName | null = exp && exp !== 'CNOT' ? exp : null
   const cnotOn = exp === 'CNOT'
-  const ready = power && !booting
+  const ready = !booting
 
   // single qubit: the input state first, the output once the last gate's OUT is wired to its pin
   const single$ = useMemo(() => (head ? resolveSingle(conns, `s.${head}.out`) : null), [conns, head])
@@ -178,9 +220,9 @@ export function KitLab({ lab }: { lab: Lab }) {
 
   // probability graph: the revealed output of the single-qubit circuit, or the full CNOT output (both pins wired)
   const graph = single?.revealed
-    ? { labels: SINGLE_LABELS, probs: probabilities(single$!.state) as number[], accent: 'blue' as const }
+    ? { labels: SINGLE_LABELS, probs: probabilities(single$!.state) as number[] }
     : cnotOn && dbl && rev0 && rev1
-      ? { labels: TWO_QUBIT_LABELS, probs: probabilities2(dbl.state), accent: 'purple' as const }
+      ? { labels: TWO_QUBIT_LABELS, probs: probabilities2(dbl.state) }
       : null
   const countsKey = graph ? (single?.revealed ? singleKey : cnotKey) : null
   const current = counts && counts.key === countsKey ? counts : null
@@ -209,13 +251,6 @@ export function KitLab({ lab }: { lab: Lab }) {
         : null
 
   const firstEmpty = head ? missingInput(conns, head) : null
-  const graphBlocked = !exp
-    ? 'Connect a gate input'
-    : head
-      ? firstEmpty
-        ? `Connect |0⟩ or |1⟩ to ${firstEmpty} IN`
-        : `Connect ${head} OUT to the ${head} OUT pin to measure`
-      : 'Connect both CNOT inputs and both outputs to measure'
 
   const phase = !exp
     ? 'Waiting for input'
@@ -233,7 +268,9 @@ export function KitLab({ lab }: { lab: Lab }) {
             ? 'Output detected'
             : 'Waiting for output'
 
-  const measureHint = `Press SHOT to measure once, or RUN for ${runShots.toLocaleString()} shots`
+  const measureHint = batch
+    ? `Press SHOT for ${batch.toLocaleString()} shots · tap ${batch.toLocaleString()} again for single shots`
+    : 'Press SHOT to measure once (hold to keep measuring) · choose 100, 500 or 1,000 for that many per press'
   const hint = !exp
     ? cfg.cnot
       ? 'Connect |0⟩ or |1⟩ to a gate IN, or Q0 and Q1 states to the CNOT — gates can be chained, e.g. H OUT → CNOT Q0 IN'
@@ -333,6 +370,7 @@ export function KitLab({ lab }: { lab: Lab }) {
     if (!ready) return
     const why = cannotMeasure()
     if (why) return say(why, 'warn')
+    if (batch) return shotBatch(batch)
     if ((current?.total ?? 0) >= MAX_SHOTS) return say(`Maximum ${MAX_SHOTS.toLocaleString()} shots — press RESET to start again`, 'warn')
     const outcome = measure(graph!.probs, 1).indexOf(1)
     const key = countsKey!
@@ -347,33 +385,19 @@ export function KitLab({ lab }: { lab: Lab }) {
     shotTimer.current = setTimeout(flushShots, 1500)
   }
 
-  /** A fresh run of `runShots` shots sampled from the circuit's probabilities, each shot its own random draw. */
-  const run = () => {
-    if (!ready) return
-    const why = cannotMeasure()
-    if (why) return say(why, 'warn')
+  /** SHOT with 100 / 500 / 1,000 selected: a fresh run of that many shots, each shot its own random draw. */
+  const shotBatch = (n: number) => {
     flushShots()
-    setCounts({ key: countsKey!, counts: measure(graph!.probs, runShots), total: runShots, last: null })
-    analytics.trackMeasurement(expId!, runShots)
-    setView('measured')
+    setCounts({ key: countsKey!, counts: measure(graph!.probs, n), total: n, last: null })
+    analytics.trackMeasurement(expId!, n)
   }
 
   const reset = () => {
-    if (!power) return
     flushShots()
     wiring.reset()
     setCounts(null)
-    setView('measured')
     analytics.trackReset(expId ?? (lab === 'bloch' ? 'bloch-h' : 'measure-h'))
     say('Reset — cables unplugged and counters cleared')
-  }
-
-  const togglePower = (on: boolean) => {
-    flushShots()
-    setPower(on)
-    setBooting(on)
-    setCounts(null)
-    setNotice(null)
   }
 
   const footer = notice ? { text: notice.text, tone: notice.tone } : { text: hint, tone: 'hint' as const }
@@ -384,8 +408,13 @@ export function KitLab({ lab }: { lab: Lab }) {
 
   return (
     <LabContext.Provider value={wiring.ctx}>
-      <div className="kit-page">
-        <div className={`hw lab-${lab}`} ref={wiring.container} onPointerDown={() => wiring.selected && wiring.clearSelection()}>
+      <div className="kit-page" ref={pageRef} style={fit ? { height: fit.pageH } : undefined}>
+        <div
+          className={`hw lab-${lab}`}
+          ref={wiring.container}
+          style={fit ? { width: fit.w, height: fit.h, transform: fit.s < 1 ? `scale(${fit.s})` : undefined } : undefined}
+          onPointerDown={() => wiring.selected && wiring.clearSelection()}
+        >
           <span className="hw-screw tl" aria-hidden />
           <span className="hw-screw tr" aria-hidden />
           <span className="hw-screw bl" aria-hidden />
@@ -398,21 +427,16 @@ export function KitLab({ lab }: { lab: Lab }) {
                 <span className="hw-tft-name">2.8&quot; TFT DISPLAY</span>
                 <div className="hw-screen">
                   <KitScreen
-                    power={power}
                     booting={booting}
                     mode={mode}
                     chip={chip}
                     phase={phase}
                     footer={footer}
                     single={single}
-                    graphBlocked={graphBlocked}
                     idleLabels={cnotOn ? TWO_QUBIT_LABELS : SINGLE_LABELS}
                     banner={banner}
                     graph={graph}
                     counts={current}
-                    runShots={runShots}
-                    view={view}
-                    onView={setView}
                     snapKey={snapKey}
                   />
                 </div>
@@ -497,30 +521,28 @@ export function KitLab({ lab }: { lab: Lab }) {
               )}
             </div>
 
-            <div className="hw-bottom">
-              {lab === 'measurement' && (
+            {lab === 'measurement' && (
+              <div className="hw-bottom">
                 <section className="hw-section hw-measure" aria-labelledby="hw-measure-title">
                   <h2 id="hw-measure-title" className="hw-tab t-measure">
                     MEASUREMENT
                   </h2>
                   <div className="hw-push">
-                    <KitButton label="Shot" onPress={shot} repeat disabled={!power} />
+                    <KitButton label={batch ? `Shot ${batch} shots` : 'Shot'} onPress={shot} repeat={!batch} />
                     <span className="hw-push-name t-single">SHOT</span>
                   </div>
-                  <div className="hw-shots" role="radiogroup" aria-labelledby="hw-shots-title">
+                  <div className="hw-shots" role="group" aria-labelledby="hw-shots-title">
                     <span id="hw-shots-title" className="hw-shots-name">
                       TOTAL SHOTS
                     </span>
                     <div className="hw-shots-set">
-                      {RUN_OPTIONS.map((n) => (
+                      {BATCH_OPTIONS.map((n) => (
                         <button
                           key={n}
                           type="button"
-                          role="radio"
-                          aria-checked={runShots === n}
-                          className={runShots === n ? 'is-on' : ''}
-                          disabled={!power}
-                          onClick={() => setRunShots(n)}
+                          aria-pressed={batch === n}
+                          className={batch === n ? 'is-on' : ''}
+                          onClick={() => setBatch((b) => (b === n ? null : n))}
                         >
                           {n.toLocaleString()}
                         </button>
@@ -528,23 +550,12 @@ export function KitLab({ lab }: { lab: Lab }) {
                     </div>
                   </div>
                   <div className="hw-push">
-                    <KitButton label={`Run ${runShots} shots`} onPress={run} disabled={!power} />
-                    <span className="hw-push-name t-double">RUN</span>
-                  </div>
-                  <div className="hw-push">
-                    <KitButton label="Reset" onPress={reset} disabled={!power} />
+                    <KitButton label="Reset" onPress={reset} />
                     <span className="hw-push-name t-measure">RESET</span>
                   </div>
                 </section>
-              )}
-              <section className="hw-section hw-power" aria-labelledby="hw-power-title">
-                <h2 id="hw-power-title" className="hw-tab t-power">
-                  POWER
-                </h2>
-                <PowerSwitch on={power} onChange={togglePower} />
-                <span className="hw-power-name">ON</span>
-              </section>
-            </div>
+              </div>
+            )}
           </div>
           <WireLayer
             container={wiring.container}

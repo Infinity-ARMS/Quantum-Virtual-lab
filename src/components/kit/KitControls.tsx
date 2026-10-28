@@ -55,15 +55,3 @@ export function KitButton({ label, onPress, repeat = false, disabled = false, ac
     </button>
   )
 }
-
-/** Black rocker power switch: I = on, O = off. */
-export function PowerSwitch({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
-  return (
-    <button type="button" role="switch" aria-checked={on} aria-label="Power" className={`hw-rocker ${on ? 'is-on' : ''}`} onClick={() => onChange(!on)}>
-      <span className="hw-rocker-body">
-        <span>I</span>
-        <span>O</span>
-      </span>
-    </button>
-  )
-}

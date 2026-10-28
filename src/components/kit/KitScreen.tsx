@@ -9,7 +9,6 @@ const BlochSphere = lazy(() => import('../BlochSphere').then((m) => ({ default: 
 type Vec3 = [number, number, number]
 
 export type ScreenMode = 'bloch' | 'graph'
-export type GraphView = 'measured' | 'ideal'
 
 export interface SingleScreen {
   /** The gates the state passes through, e.g. "H → Z". */
@@ -35,30 +34,22 @@ export interface GraphBanner {
 }
 
 export interface ScreenProps {
-  power: boolean
   booting: boolean
   mode: ScreenMode
   chip: string | null
   phase: string
   footer: { text: string; tone: 'hint' | 'info' | 'warn' }
   single: SingleScreen | null
-  /** Why the graph is unavailable, when it is. */
-  graphBlocked: string | null
-  graph: { labels: readonly string[]; probs: number[]; accent: 'blue' | 'purple' } | null
+  graph: { labels: readonly string[]; probs: number[] } | null
   /** Outcome labels of the empty graph shown until a circuit is complete (|0⟩ |1⟩, or the four CNOT outcomes). */
   idleLabels: readonly string[]
   banner: GraphBanner | null
   counts: { counts: number[]; total: number; last: { n: number; outcome: number } | null } | null
-  /** Shots per RUN press, shown next to the counts. */
-  runShots: number
-  view: GraphView
-  onView: (v: GraphView) => void
   snapKey: number
 }
 
 /** The 2.8″ TFT: boot screen, then the lab's screen — the Bloch sphere (Bloch Sphere Lab) or the probability graph (Measurement Lab). */
 export function KitScreen(p: ScreenProps) {
-  if (!p.power) return <div className="tft-off" aria-label="Display off" />
   if (p.booting)
     return (
       <div className="tft-boot">
@@ -102,122 +93,55 @@ function BlochView({ single, snapKey }: ScreenProps) {
         <Sphere vector={single ? single.shownVec : null} snapKey={snapKey} route={single?.route} />
         {!single && <div className="tft-empty">Connect a gate input</div>}
       </div>
-      <dl className="tft-info">
-        <div className="tft-state">
-          <dt>State</dt>
-          <dd>{single ? single.shownKet : '—'}</dd>
-        </div>
-        <div>
-          <dt>{single && single.circuit.includes('→') ? 'Gates' : 'Gate'}</dt>
-          <dd>{single ? single.circuit : '—'}</dd>
-        </div>
-        <div>
-          <dt>Input</dt>
-          <dd>{single ? single.inputKet : '—'}</dd>
-        </div>
-        <div>
-          <dt>Output</dt>
-          <dd className={single && !single.revealed ? 'wait' : ''}>
-            {single ? (single.revealed && single.outputKet ? single.outputKet : `connect ${single.head} OUT`) : '—'}
-          </dd>
-        </div>
-      </dl>
+      {/* the sphere is a picture: its reading is announced for screen readers */}
+      <p className="sr-only" aria-live="polite">
+        {single
+          ? `State ${single.shownKet}. ${single.circuit.includes('→') ? 'Gates' : 'Gate'} ${single.circuit}. Input ${single.inputKet}. ${
+              single.revealed && single.outputKet ? `Output ${single.outputKet}.` : `Connect ${single.head} OUT to see the output.`
+            }`
+          : 'No state yet.'}
+      </p>
     </div>
   )
 }
 
-function GraphViewPane({ graph, graphBlocked, idleLabels, banner, counts, runShots, view, onView }: ScreenProps) {
+function GraphViewPane({ graph, idleLabels, banner, counts }: ScreenProps) {
   // until a circuit is complete the screen still shows its graph: axes, the outcome labels and zero counts
   const labels = graph ? graph.labels : idleLabels
   const total = counts?.total ?? 0
-  const measured = labels.map((_, i) => (total ? (counts!.counts[i] ?? 0) / total : 0))
-  const ideal = !!graph && view === 'ideal'
+  const shots = labels.map((_, i) => counts?.counts[i] ?? 0)
+  const measured = shots.map((n) => (total ? n / total : 0))
   return (
     <div className="tft-graph">
-      <div className="tft-chart">
-        <div className="tft-switch" role="group" aria-label="Graph shows">
-          <button type="button" className={!ideal ? 'is-on' : ''} onClick={() => onView('measured')} aria-pressed={!ideal} disabled={!graph}>
-            Measured
-          </button>
-          <button type="button" className={ideal ? 'is-on' : ''} onClick={() => onView('ideal')} aria-pressed={ideal} disabled={!graph}>
-            Ideal
-          </button>
+      <div className="tft-stats" aria-label="Measurement counts">
+        <div className="tft-total">
+          <span>Total shots</span>
+          <b>{total.toLocaleString()}</b>
         </div>
-        <div className="tft-plot">
-          <ProbabilityGraph
-            labels={labels}
-            theory={graph ? (ideal ? graph.probs : measured) : null}
-            measured={null}
-            accent={ideal ? graph.accent : 'blue'}
-          />
-          {graph && !ideal && total === 0 && banner && (
-            <div className="tft-banner" role="status">
-              <p className="tft-banner-eq">
-                <b>{banner.from}</b>
-                <span className="tft-banner-via">{banner.via}</span>
-                <b className="to">{banner.to}</b>
-              </p>
-              <p className="tft-banner-hint">Press SHOT to measure</p>
-              {banner.entangled && <p className="tft-banner-ent">ENTANGLED (Bell state)</p>}
-            </div>
-          )}
-        </div>
+        <ul className="tft-counts">
+          {labels.map((l, i) => (
+            <li key={l} className={counts?.last?.outcome === i ? 'last' : ''}>
+              <b>{l}</b>
+              <span>{shots[i].toLocaleString()}</span>
+              <em>{total ? `${(measured[i] * 100).toFixed(1)}%` : '—'}</em>
+            </li>
+          ))}
+        </ul>
       </div>
-      <aside className="tft-stats">
-        {!ideal ? (
-          <>
-            <div className="tft-total">
-              <span>Total shots</span>
-              <b>{total.toLocaleString()}</b>
-            </div>
-            <table className="tft-table">
-              <thead>
-                <tr>
-                  <th scope="col">State</th>
-                  <th scope="col">Counts</th>
-                  <th scope="col">Measured</th>
-                </tr>
-              </thead>
-              <tbody>
-                {labels.map((l, i) => (
-                  <tr key={l} className={counts?.last?.outcome === i ? 'last' : ''}>
-                    <th scope="row">{l}</th>
-                    <td>{(counts?.counts[i] ?? 0).toLocaleString()}</td>
-                    <td>{total ? `${(measured[i] * 100).toFixed(1)}%` : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!graph ? (
-              <p className="tft-note">{graphBlocked}</p>
-            ) : (
-              total === 0 && <p className="tft-note">SHOT measures once · RUN takes {runShots.toLocaleString()} shots</p>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="tft-total">
-              <span>Ideal probabilities</span>
-            </div>
-            <table className="tft-table">
-              <thead>
-                <tr>
-                  <th scope="col">State</th>
-                  <th scope="col">P</th>
-                </tr>
-              </thead>
-              <tbody>
-                {labels.map((l, i) => (
-                  <tr key={l}>
-                    <th scope="row">{l}</th>
-                    <td>{(graph.probs[i] * 100).toFixed(1)}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
+      <div className="tft-plot">
+        <ProbabilityGraph labels={labels} theory={graph ? measured : null} measured={null} accent="blue" counts={shots} />
+        {graph && total === 0 && banner && (
+          <div className="tft-banner" role="status">
+            <p className="tft-banner-eq">
+              <b>{banner.from}</b>
+              <span className="tft-banner-via">{banner.via}</span>
+              <b className="to">{banner.to}</b>
+            </p>
+            <p className="tft-banner-hint">Press SHOT to measure</p>
+            {banner.entangled && <p className="tft-banner-ent">ENTANGLED (Bell state)</p>}
+          </div>
         )}
-      </aside>
+      </div>
     </div>
   )
 }

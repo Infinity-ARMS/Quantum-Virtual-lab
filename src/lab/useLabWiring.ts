@@ -80,9 +80,12 @@ export function useLabWiring(storageKey: string, onConnected?: (from: string, to
     setPending(null)
   }, [])
 
+  /** A pointer position in the panel's own pixels (the panel may be scaled down to fit a phone screen). */
   const relative = (e: { clientX: number; clientY: number }) => {
     const r = container.current?.getBoundingClientRect()
-    return r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: 0, y: 0 }
+    if (!r) return { x: 0, y: 0 }
+    const k = r.width / (container.current?.offsetWidth || r.width) || 1
+    return { x: (e.clientX - r.left) / k, y: (e.clientY - r.top) / k }
   }
 
   /** Tap / click / keyboard activation: first terminal selects, second one connects. */

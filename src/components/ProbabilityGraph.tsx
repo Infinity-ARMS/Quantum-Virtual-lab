@@ -6,19 +6,21 @@ interface Props {
   theory: number[] | null
   measured: number[] | null
   accent: 'blue' | 'purple'
+  /** Shots that gave each outcome, shown under its label ("58 shots"). */
+  counts?: number[]
 }
 
 const TICKS = [100, 75, 50, 25, 0]
 const ease = [0.4, 0, 0.2, 1] as const
 
 /** Scientific-style bar chart: theoretical |amplitude|² with optional measured frequencies alongside. */
-export function ProbabilityGraph({ labels, theory, measured, accent }: Props) {
+export function ProbabilityGraph({ labels, theory, measured, accent, counts }: Props) {
   const probs = theory ?? labels.map(() => 0)
   // four paired bars leave little room: use whole-percent labels
   const tight = labels.length > 2 && measured !== null
   const digits = tight ? 0 : 1
   return (
-    <div className={`prob-chart accent-${accent} ${theory ? '' : 'is-idle'} ${tight ? 'is-tight' : ''}`}>
+    <div className={`prob-chart accent-${accent} ${theory ? '' : 'is-idle'} ${tight ? 'is-tight' : ''} ${counts ? 'has-counts' : ''}`}>
       <div className="prob-axis">
         {TICKS.map((t) => (
           <span key={t} style={{ bottom: `${t}%` }}>
@@ -73,6 +75,11 @@ export function ProbabilityGraph({ labels, theory, measured, accent }: Props) {
                   )}
                 </div>
                 <div className="prob-label">{label}</div>
+                {counts && (
+                  <div className="prob-count">
+                    {counts[i].toLocaleString()} {counts[i] === 1 ? 'shot' : 'shots'}
+                  </div>
+                )}
               </div>
             )
           })}

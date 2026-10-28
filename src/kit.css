@@ -134,6 +134,10 @@
   grid-template-columns: minmax(0, 1fr) 220px;
   gap: 14px;
 }
+/* the Measurement Lab's TFT has no side column: the screen is a little narrower and the output pins box wider */
+.lab-measurement .hw-top {
+  grid-template-columns: minmax(0, 1fr) 270px;
+}
 .hw-tft {
   display: flex;
   min-height: 0;
@@ -356,19 +360,13 @@
   text-align: center;
 }
 
-/* ================================================================== bottom row: measurement + power */
+/* ================================================================== bottom row: measurement (Measurement Lab only) */
 
 .hw-bottom {
   flex: none;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
   margin-top: 20px;
-}
-/* the Bloch Sphere Lab has no measurement controls: POWER keeps its place at the right */
-.lab-bloch .hw-bottom {
-  grid-template-columns: 220px;
-  justify-content: end;
 }
 .hw-measure {
   align-items: center;
@@ -424,22 +422,6 @@
   outline: 2px solid #5b5ea6;
   outline-offset: -4px;
 }
-.hw-shots-set button:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
-}
-.hw-power {
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 12px 14px 4px;
-}
-.hw-power-name {
-  color: #e5532b;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
 
 /* ================================================================== controls */
 
@@ -484,36 +466,10 @@
   cursor: not-allowed;
   opacity: 0.65;
 }
-.hw-btn:focus-visible,
-.hw-rocker:focus-visible {
+.hw-btn:focus-visible {
   outline: 2px solid #5b5ea6;
   outline-offset: 3px;
 }
-.hw-rocker {
-  padding: 3px;
-  border: 0;
-  border-radius: 4px;
-  background: #111111;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
-  cursor: pointer;
-}
-.hw-rocker-body {
-  display: flex;
-  width: 24px;
-  height: 40px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-around;
-  border-radius: 2px;
-  background: linear-gradient(#2c2c2c, #0e0e0e);
-  box-shadow: inset 0 -8px 8px rgba(0, 0, 0, 0.45);
-  color: #dddddd;
-  font: 700 11px var(--mono);
-}
-.hw-rocker.is-on .hw-rocker-body {
-  box-shadow: inset 0 8px 8px rgba(0, 0, 0, 0.45);
-}
-
 /* jacks: slightly tighter touch area on the panel so every section fits on screen */
 .hw .socket-hit.size-lg {
   width: 36px;
@@ -539,10 +495,6 @@
 
 /* ================================================================== TFT screen */
 
-.tft-off {
-  flex: 1;
-  background: #0b0b0d;
-}
 .tft-boot {
   display: flex;
   flex: 1;
@@ -657,11 +609,9 @@
   color: #92400e;
 }
 
-/* Bloch sphere mode */
+/* Bloch sphere mode: the sphere fills the screen */
 .tft-bloch {
-  display: grid;
   height: 100%;
-  grid-template-columns: minmax(0, 1fr) 180px;
 }
 .tft-sphere {
   position: relative;
@@ -685,39 +635,6 @@
   font-weight: 700;
   pointer-events: none;
 }
-.tft-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 0;
-  overflow: auto;
-  padding: 6px 12px;
-  border-left: 1px solid #e5e7eb;
-}
-.tft-info dt {
-  color: #94a3b8;
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.tft-info dd {
-  margin: 0;
-  color: #0f172a;
-  font-family: var(--mono);
-  font-size: 14px;
-}
-.tft-info .tft-state dd {
-  color: #4338ca;
-  font-size: 24px;
-  font-weight: 700;
-}
-.tft-info dd.wait {
-  color: #b45309;
-  font-family: var(--sans);
-  font-size: 12px;
-  font-weight: 600;
-}
 .tft-sphere-loading {
   position: absolute;
   inset: 18%;
@@ -725,21 +642,12 @@
   border-radius: 50%;
 }
 
-/* probability graph mode */
+/* probability graph mode: the counts line on top, the graph across the full width below */
 .tft-graph {
-  display: grid;
-  height: 100%;
-  grid-template-columns: minmax(0, 1fr) 190px;
-}
-.tft-chart {
   display: flex;
-  min-height: 0;
+  height: 100%;
   flex-direction: column;
-  padding: 4px 8px 0;
-}
-.tft-chart .prob-chart {
-  flex: 1;
-  min-height: 0;
+  padding: 5px 10px 0;
 }
 .tft-plot {
   position: relative;
@@ -748,9 +656,9 @@
   min-height: 0;
   flex-direction: column;
 }
-.tft-switch button:disabled {
-  cursor: default;
-  opacity: 0.5;
+.tft-plot .prob-chart {
+  flex: 1;
+  min-height: 0;
 }
 /* the kit's banner over the graph before the first shot */
 .tft-banner {
@@ -816,39 +724,22 @@
   font-weight: 800;
   letter-spacing: 0.06em;
 }
-.tft-switch {
-  display: inline-flex;
-  align-self: flex-end;
-  padding: 2px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f1f5f9;
-}
-.tft-switch button {
-  padding: 2px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.tft-switch button.is-on {
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.15);
-  color: #3730a3;
-}
 .tft-stats {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow: auto;
-  padding: 8px 10px;
-  border-left: 1px solid #e5e7eb;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 14px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed #e5e7eb;
+}
+.tft-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 .tft-total span {
-  display: block;
   color: #94a3b8;
   font-size: 9.5px;
   font-weight: 800;
@@ -858,42 +749,45 @@
 .tft-total b {
   color: #4338ca;
   font-family: var(--mono);
-  font-size: 24px;
+  font-size: 22px;
+  line-height: 1;
 }
-.tft-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
+.tft-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.tft-table th,
-.tft-table td {
-  padding: 3px 4px;
-  border-bottom: 1px dashed #e5e7eb;
-  text-align: right;
-}
-.tft-table th:first-child {
-  text-align: left;
-}
-.tft-table thead th {
-  color: #94a3b8;
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.tft-table tbody th,
-.tft-table td {
+.tft-counts li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 2px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
   font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
 }
-.tft-table tr.last {
+.tft-counts b {
+  color: #0f172a;
+}
+.tft-counts span {
+  color: #4338ca;
+  font-weight: 700;
+}
+.tft-counts em {
+  color: #64748b;
+  font-style: normal;
+}
+/* the outcome of the latest single shot */
+.tft-counts li.last {
+  border-color: #c7d2fe;
   background: #eef2ff;
 }
-.tft-note {
-  margin: 0;
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 600;
-}
-
 /* ================================================================== completion summary */
 
 .done-backdrop {
@@ -997,20 +891,8 @@
 
 /* touch screens (phones, tablets): comfortable targets for the small kit controls */
 @media (pointer: coarse) {
-  /* the POWER rocker keeps its look; its tap area grows around it */
-  .hw-rocker {
-    position: relative;
-  }
-  .hw-rocker::after {
-    content: '';
-    position: absolute;
-    inset: -8px -10px;
-  }
   .hw-shots-set button {
     min-height: 34px;
-  }
-  .tft-switch button {
-    min-height: 32px;
   }
   /* the 3D canvas and its React Three Fiber wrapper set touch-action: none as inline styles (hence !important):
      a vertical swipe on the sphere now scrolls the page, a sideways drag still turns the sphere */
@@ -1046,8 +928,7 @@
   .hw-bottom {
     margin-top: 17px;
   }
-  .hw-measure,
-  .hw-power {
+  .hw-measure {
     padding-top: 10px;
     padding-bottom: 2px;
   }
@@ -1072,9 +953,8 @@
     height: auto;
   }
   .hw-top,
-  .lab-measurement .hw-mid,
-  .hw-bottom,
-  .lab-bloch .hw-bottom {
+  .lab-measurement .hw-top,
+  .lab-measurement .hw-mid {
     grid-template-columns: minmax(0, 1fr);
   }
   .hw-top {
@@ -1094,22 +974,8 @@
   .hw-section {
     flex-wrap: wrap;
   }
-  .tft-bloch,
-  .tft-graph {
-    grid-template-columns: minmax(0, 1fr) 150px;
-  }
 }
 @media (max-width: 560px) {
-  .tft-bloch,
-  .tft-graph {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
-  }
-  .tft-info,
-  .tft-stats {
-    border-left: 0;
-    border-top: 1px solid #e5e7eb;
-  }
   .hw-screen {
     height: 420px;
   }
@@ -1159,9 +1025,370 @@
   }
 }
 
-/* phones held sideways: the screen fits under the header instead of being taller than the window */
-@media (max-width: 1000px) and (max-height: 500px) {
+/* ================================================================== phones: the whole kit on one screen */
+
+/* Phones show the whole kit at once, without scrolling, so a cable plugged in at the bottom is seen on the screen at
+   the top. KitLab (useKitFit) sizes the panel to the window and scales it down on screens too small for it; these
+   media queries match PHONE_PORTRAIT and PHONE_LANDSCAPE there. Shared compact sizes first. */
+@media (max-width: 600px) and (orientation: portrait), (max-width: 1000px) and (max-height: 500px) and (orientation: landscape) {
+  .shell:has(.kit-page) {
+    min-height: 0;
+  }
+  .kit-page {
+    display: block;
+    min-height: 0;
+    padding: 4px;
+    overflow: hidden;
+  }
+  .hw {
+    max-width: none;
+    padding: 4px;
+    transform-origin: 0 0;
+  }
+  .hw-screw {
+    display: none;
+  }
+  .hw-frame {
+    padding: 5px 8px 8px;
+    border-width: 2px;
+    border-radius: 12px;
+  }
+  .hw-title {
+    margin-bottom: 6px;
+    padding: 1px 10px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  /* TFT: one status line, one hint line */
+  .hw-tft {
+    padding: 2px 6px 6px;
+    border-radius: 10px;
+  }
+  .hw-tft-name {
+    margin-bottom: 2px;
+    font-size: 10px;
+  }
   .hw-screen {
-    height: max(220px, calc(100dvh - 110px));
+    flex: 1;
+    height: auto;
+    min-height: 0;
+    border-width: 2px;
+  }
+  .tft-head {
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+  .tft-chip {
+    order: 0;
+    min-width: 0;
+    max-width: none;
+  }
+  .tft-foot {
+    padding: 2px 8px;
+    font-size: 10.5px;
+    white-space: nowrap;
+  }
+  .tft-empty {
+    font-size: 12px;
+  }
+  /* nothing scrolls here: a drag on the sphere turns it in every direction (and never pulls the page to refresh) */
+  .tft-sphere canvas,
+  .tft-sphere .bloch-stage > div {
+    touch-action: none !important;
+  }
+  /* graph: TOTAL SHOTS on top, each state's shots stay under its bar */
+  .tft-graph {
+    padding: 2px 8px 0;
+  }
+  .tft-stats {
+    padding-bottom: 2px;
+  }
+  .tft-counts {
+    display: none;
+  }
+  .tft-total b {
+    font-size: 16px;
+  }
+  .tft-plot .prob-chart {
+    height: auto;
+    grid-template-columns: 30px 1fr;
+    padding: 12px 2px 32px 0;
+  }
+  .tft-plot .prob-bars {
+    gap: 4px;
+    padding: 0 6px;
+  }
+  .tft-plot .prob-value {
+    font-size: 10.5px;
+  }
+  .tft-plot .prob-label {
+    bottom: -17px;
+    font-size: 11px;
+  }
+  .tft-plot .prob-count {
+    bottom: -30px;
+    font-size: 9.5px;
+  }
+  .tft-banner {
+    top: 6%;
+    padding: 4px 10px;
+  }
+  .tft-banner-eq {
+    font-size: 14px;
+  }
+  .tft-banner-hint,
+  .tft-banner-ent {
+    font-size: 10px;
+  }
+  /* output pins: the name above each jack, the title on the box edge */
+  .hw-pins {
+    padding-top: 8px;
+  }
+  .hw-pins-title {
+    position: absolute;
+    top: -9px;
+    left: 12px;
+    padding: 0 8px;
+    border: 1.5px solid var(--hw-line);
+    border-radius: 8px;
+    background: #ffffff;
+    font-size: 10px;
+    line-height: 15px;
+  }
+  .hw-pins ul {
+    padding: 2px 4px;
+  }
+  .hw-pins .socket-wrap {
+    flex-direction: column-reverse;
+    gap: 0;
+  }
+  .hw-pins .hw-txt {
+    font-size: 10px;
+  }
+  .hw-channel {
+    height: 12px;
+  }
+  /* sections and gates */
+  .hw-section {
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 12px 8px 6px;
+    border-radius: 12px;
+  }
+  .hw-tab {
+    top: -10px;
+    left: 12px;
+    padding: 0 8px;
+    border-width: 1.5px;
+    font-size: 11px;
+    line-height: 15px;
+  }
+  .hw-init {
+    width: auto;
+    min-width: 0;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: center;
+    padding: 3px 6px;
+    border-radius: 10px;
+  }
+  .hw-init-title {
+    font-size: 9px;
+    text-align: center;
+  }
+  .hw-ket {
+    font-size: 14px;
+  }
+  .hw .socket-wrap {
+    gap: 4px;
+  }
+  .hw .socket-hit.size-lg {
+    width: 34px;
+    height: 34px;
+  }
+  .hw .socket.size-lg {
+    width: 26px;
+    height: 26px;
+  }
+  .hw-txt {
+    font-size: 11px;
+  }
+  .hw-gates {
+    max-width: none;
+    gap: 10px;
+    padding-top: 2px;
+  }
+  .hw-gate {
+    gap: 4px;
+    padding: 0 4px;
+    border-radius: 9px;
+  }
+  .hw-gate-tab {
+    top: -8px;
+    padding: 0 6px;
+    font-size: 9px;
+    line-height: 12px;
+  }
+  .hw-badge {
+    width: 24px;
+    height: 21px;
+    font-size: 14px;
+  }
+  .hw-init-grid {
+    gap: 0 6px;
+  }
+  .hw-qname {
+    font-size: 10px;
+  }
+  .hw-cnot {
+    padding: 3px 6px;
+    border-radius: 10px;
+  }
+  .hw-cnot .hw-txt {
+    font-size: 10px;
+  }
+  .hw-cnot-grid {
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      'q0in sym q0out'
+      'q1in sym q1out';
+    gap: 0 3px;
+  }
+  .hw-cnot-symbol {
+    width: 34px;
+    height: 30px;
+  }
+  .hw-caption {
+    font-size: 9px;
+  }
+  /* measurement row */
+  .hw-bottom {
+    margin-top: 14px;
+  }
+  .hw-measure {
+    gap: 8px;
+    padding: 10px 8px 4px;
+  }
+  .hw-push-name {
+    font-size: 11px;
+  }
+  .hw-btn {
+    width: 34px;
+    height: 34px;
+  }
+  .hw-btn-cap {
+    width: 23px;
+    height: 23px;
+  }
+  .hw-shots-name {
+    font-size: 10px;
+  }
+  .hw-shots-set button {
+    min-width: 40px;
+    min-height: 34px;
+    padding: 2px 4px;
+    font-size: 11px;
+  }
+}
+
+/* phone, portrait: TFT, output pins, then the qubit sections and the measurement row, stacked */
+@media (max-width: 600px) and (orientation: portrait) {
+  .hw-top {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 14px;
+  }
+  .hw-pins ul {
+    flex-direction: row;
+    justify-content: space-around;
+  }
+  .hw-mid {
+    gap: 16px;
+  }
+}
+
+/* phone, landscape: the TFT on the left at full height, the rest of the panel on the right */
+@media (max-width: 1000px) and (max-height: 500px) and (orientation: landscape) {
+  .hw-frame {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas:
+      'tft title title'
+      'tft single pins'
+      'tft . .';
+    column-gap: 12px;
+  }
+  .hw-top,
+  .hw-mid,
+  .hw-bottom {
+    display: contents;
+  }
+  .hw-title {
+    grid-area: title;
+  }
+  .hw-tft {
+    grid-area: tft;
+  }
+  .hw-pins {
+    grid-area: pins;
+    margin-top: 10px;
+  }
+  .hw-channel {
+    display: none;
+  }
+  .hw-single {
+    grid-area: single;
+    margin-top: 10px;
+  }
+  /* Bloch Sphere Lab: the output pins stand beside the gates, named beside each jack as on the desktop panel */
+  .lab-bloch .hw-pins {
+    padding-top: 0;
+  }
+  .lab-bloch .hw-pins-title {
+    position: static;
+    padding: 4px 8px;
+    border: 0;
+    border-bottom: 2px solid var(--hw-line);
+    border-radius: 0;
+    background: none;
+    white-space: nowrap;
+  }
+  .lab-bloch .hw-pins ul {
+    flex-direction: column;
+    justify-content: space-around;
+    padding: 2px 8px;
+  }
+  .lab-bloch .hw-pins .socket-wrap {
+    flex-direction: row;
+    gap: 4px;
+  }
+  /* Measurement Lab: output pins and the measurement controls above the cable channel, the qubit sections below */
+  .lab-measurement .hw-frame {
+    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    grid-template-areas:
+      'tft title title'
+      'tft pins measure'
+      'tft channel channel'
+      'tft single double'
+      'tft . .';
+  }
+  .lab-measurement .hw-pins ul {
+    flex-direction: row;
+    justify-content: space-around;
+  }
+  .lab-measurement .hw-channel {
+    display: block;
+    grid-area: channel;
+  }
+  .hw-double {
+    grid-area: double;
+    margin-top: 10px;
+  }
+  .hw-measure {
+    grid-area: measure;
+    margin-top: 10px;
   }
 }

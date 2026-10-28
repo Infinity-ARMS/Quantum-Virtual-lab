@@ -430,7 +430,13 @@ export function BlochSphere({ vector, start = null, route = null, snapKey, reset
   const home = useMemo(() => HOME.clone().multiplyScalar(compact ? 1.12 : 1), [compact])
   return (
     <div className={`bloch-stage ${compact ? 'compact' : ''}`}>
-      <Canvas camera={{ position: home.toArray(), fov: 34 }} dpr={[1, 1.75]} gl={{ antialias: true, alpha: true }}>
+      <Canvas
+        camera={{ position: home.toArray(), fov: 34 }}
+        dpr={[1, 1.75]}
+        gl={{ antialias: true, alpha: true }}
+        // the kit can be scaled down to fit a phone screen: size the canvas by its own (unscaled) box
+        resize={{ offsetSize: true }}
+      >
         <ambientLight intensity={0.85} />
         <directionalLight position={[3, 5, 4]} intensity={1.1} />
         <directionalLight position={[-4, -2, -3]} intensity={0.35} />
